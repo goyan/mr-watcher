@@ -26,9 +26,10 @@ final class StateStore {
     var events: [WatchEvent] = []
     var isLoading: Bool = false
     var lastError: String? = nil
+    var lastErrorIsAuth: Bool = false
     var dismissedKeys: Set<MRKey> = []
 
-    var isConfigured: Bool { ConfigManager.shared.isConfigured }
+    var isConfigured: Bool = ConfigManager.shared.isConfigured
 
     private let maxEvents = 50
 

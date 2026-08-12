@@ -5,6 +5,7 @@ struct MenuBarView: View {
     let store: StateStore
     let scheduler: PollingScheduler
     let onClearEvents: () -> Void
+    @State private var showSetup: Bool = false
 
     var body: some View {
         headerSection
@@ -33,11 +34,23 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var contentSection: some View {
-        if !store.isConfigured {
-            SetupView()
+        if showSetup || !store.isConfigured {
+            SetupView(
+                onDismiss: store.isConfigured ? {
+                    showSetup = false
+                    store.lastError = nil
+                    store.lastErrorIsAuth = false
+                    Task { await scheduler.pollNow() }
+                } : nil,
+                onSaved: { store.isConfigured = ConfigManager.shared.isConfigured }
+            )
         } else {
             if let error = store.lastError {
                 Text("⚠️ \(error)").foregroundStyle(.red).font(.caption)
+                if store.lastErrorIsAuth {
+                    Button("Reconfigurer…") { showSetup = true }
+                        .font(.caption)
+                }
                 Divider()
             }
             eventsSection

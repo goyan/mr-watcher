@@ -81,7 +81,7 @@ final class PollingScheduler {
     }
 
     private static func poll(store: StateStore, gitlab: GitLabService) async {
-        await MainActor.run { store.isLoading = true; store.lastError = nil }
+        await MainActor.run { store.isLoading = true; store.lastError = nil; store.lastErrorIsAuth = false }
         do {
             let mrs = try await gitlab.fetchMyOpenMRs()
 
@@ -126,6 +126,7 @@ final class PollingScheduler {
         } catch {
             await MainActor.run {
                 store.lastError = error.localizedDescription
+                store.lastErrorIsAuth = { if case .unauthorized = error as? MRWatcherError { return true }; return false }()
                 store.isLoading = false
             }
         }

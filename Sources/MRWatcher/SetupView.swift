@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct SetupView: View {
+    var onDismiss: (() -> Void)? = nil
+    var onSaved: (() -> Void)? = nil
     @State private var pat: String = ""
-    @State private var host: String = "gitlab.factory.fonciamillenium.net"
-    @State private var username: String = ""
+    @State private var host: String = ConfigManager.shared.gitlabHost
+    @State private var username: String = ConfigManager.shared.gitlabUsername ?? ""
     @State private var saved = false
     @State private var errorMsg: String? = nil
 
@@ -21,10 +23,14 @@ struct SetupView: View {
             Text("⚠️ \(err)").foregroundStyle(.red).font(.caption)
         }
 
-        Button(saved ? "✅ Sauvegardé — relancez l'app" : "Sauvegarder") {
+        Button(saved ? "✅ Sauvegardé" : "Sauvegarder") {
             save()
         }
         .disabled(pat.isEmpty || host.isEmpty || username.isEmpty || saved)
+
+        if onDismiss != nil {
+            Button("Annuler") { onDismiss?() }
+        }
     }
 
     private func save() {
@@ -68,6 +74,14 @@ struct SetupView: View {
             errorMsg = nil
             saved = true
             ConfigManager.shared.reload()
+            onSaved?()
+            // Dismiss reconfiguration sheet after a brief moment to show the saved feedback
+            if onDismiss != nil {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(0.8))
+                    onDismiss?()
+                }
+            }
         } catch {
             errorMsg = error.localizedDescription
         }
