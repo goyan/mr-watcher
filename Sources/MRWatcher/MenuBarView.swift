@@ -34,8 +34,7 @@ struct MenuBarView: View {
     @ViewBuilder
     private var contentSection: some View {
         if !store.isConfigured {
-            Text("Configurer GITLAB_PAT dans ~/.env")
-                .foregroundStyle(.secondary).font(.caption)
+            SetupView()
         } else {
             if let error = store.lastError {
                 Text("⚠️ \(error)").foregroundStyle(.red).font(.caption)
