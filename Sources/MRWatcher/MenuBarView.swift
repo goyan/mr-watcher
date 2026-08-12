@@ -65,7 +65,8 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var mrsSection: some View {
-        Text("MRs ouvertes (\(store.mrs.count))").font(.caption).foregroundStyle(.secondary)
+        let openedCount = store.mrs.filter { $0.state == "opened" }.count
+        Text("MRs ouvertes (\(openedCount))").font(.caption).foregroundStyle(.secondary)
         ForEach(Array(store.mrs.enumerated()), id: \.element.id) { idx, mr in
             if idx > 0 { Divider() }
             // Ligne 1 : cliquable — IID · PROD · CI · approvals · âge
@@ -77,8 +78,16 @@ struct MenuBarView: View {
             Text("  " + truncated(mr.title, 52))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            // Bouton rebase — visible uniquement si la branche est en retard
-            if let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
+            // Bouton "Retirer" — uniquement pour les MRs mergées
+            if mr.state == "merged" {
+                Button("  ✕ Retirer") {
+                    store.dismiss(key: MRKey(projectId: mr.projectId, iid: mr.iid))
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            }
+            // Bouton rebase — visible uniquement si la branche est en retard et non mergée
+            if mr.state != "merged", let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
                 Button("  ↩ /rebase (\(behind) commits)") {
                     let alert = NSAlert()
                     alert.messageText = "Lancer le rebase ?"
@@ -130,6 +139,9 @@ struct MenuBarView: View {
         if let ticket = extractTicketFromMR(mr) {
             parts.append(ticket)
         }
+
+        // Merged
+        if mr.state == "merged" { parts.append("[MERGED]") }
 
         // Draft
         if mr.isDraft { parts.append("[DRAFT]") }
@@ -210,6 +222,7 @@ struct MenuBarView: View {
         case .ciFailure:  return "xmark.circle.fill"
         case .ciSuccess:  return "checkmark.circle.fill"
         case .newComment: return "bubble.left.fill"
+        case .merged:     return "checkmark.seal.fill"
         }
     }
 

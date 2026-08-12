@@ -30,9 +30,10 @@ struct MRSummary: Identifiable, Codable {
     let headPipeline: EmbeddedPipeline?
     let divergedCommitsCount: Int?
     let hasConflicts: Bool
+    let state: String  // "opened", "merged", "closed"
 
     enum CodingKeys: String, CodingKey {
-        case id, iid, title
+        case id, iid, title, state
         case projectId = "project_id"
         case webUrl = "web_url"
         case notesCount = "user_notes_count"

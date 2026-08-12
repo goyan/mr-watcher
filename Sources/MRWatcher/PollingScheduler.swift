@@ -84,19 +84,43 @@ final class PollingScheduler {
         await MainActor.run { store.isLoading = true; store.lastError = nil }
         do {
             let mrs = try await gitlab.fetchMyOpenMRs()
+
+            // Snapshot opened keys before this poll so we can detect disappearances
+            let previousOpenedKeys = await MainActor.run {
+                Set(store.mrs.filter { $0.state == "opened" }.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
+            }
+
             var approvals: [MRKey: MRApprovals] = [:]
             var enrichedMRs: [MRSummary] = []
+            var mergedMRs: [MRSummary] = []
             for mr in mrs {
                 if Task.isCancelled { return }
                 let key = MRKey(projectId: mr.projectId, iid: mr.iid)
                 let detailed = (try? await gitlab.fetchMRDetail(projectId: mr.projectId, mrIid: mr.iid)) ?? mr
-                enrichedMRs.append(detailed)
+                if detailed.state == "merged" {
+                    mergedMRs.append(detailed)
+                } else {
+                    enrichedMRs.append(detailed)
+                }
                 if let appr = try? await gitlab.fetchApprovals(projectId: mr.projectId, mrIid: mr.iid) {
                     approvals[key] = appr
                 }
             }
+
+            // Detect MRs that disappeared from the opened list and fetch their real state
+            let newKeys = Set(mrs.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
+            let disappearedKeys = previousOpenedKeys.subtracting(newKeys)
+            for key in disappearedKeys {
+                if Task.isCancelled { return }
+                if let detail = try? await gitlab.fetchMRDetail(projectId: key.projectId, mrIid: key.iid),
+                   detail.state == "merged" {
+                    mergedMRs.append(detail)
+                }
+                // If state == "closed" → ignore silently
+            }
+
             await MainActor.run {
-                store.update(mrs: enrichedMRs, approvals: approvals)
+                store.update(mrs: enrichedMRs, mergedMRs: mergedMRs, approvals: approvals)
                 store.isLoading = false
             }
         } catch {

@@ -15,7 +15,7 @@ struct WatchEvent: Identifiable {
 }
 
 enum WatchEventKind {
-    case ciFailure, ciSuccess, newComment
+    case ciFailure, ciSuccess, newComment, merged
 }
 
 @MainActor
@@ -26,20 +26,37 @@ final class StateStore {
     var events: [WatchEvent] = []
     var isLoading: Bool = false
     var lastError: String? = nil
+    var dismissedKeys: Set<MRKey> = []
 
     var isConfigured: Bool { ConfigManager.shared.isConfigured }
 
     private let maxEvents = 50
 
-    func update(mrs: [MRSummary], approvals: [MRKey: MRApprovals]) {
+    func dismiss(key: MRKey) {
+        dismissedKeys.insert(key)
+        mrs.removeAll { MRKey(projectId: $0.projectId, iid: $0.iid) == key }
+    }
+
+    func update(mrs: [MRSummary], mergedMRs: [MRSummary] = [], approvals: [MRKey: MRApprovals]) {
         var newEvents: [WatchEvent] = []
 
-        for mr in mrs {
+        // Detect merges: MRs that disappeared from the opened list and were confirmed merged
+        for mr in mergedMRs {
             let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+            guard !dismissedKeys.contains(key) else { continue }
+            newEvents.append(WatchEvent(
+                id: UUID(), kind: .merged,
+                mrTitle: mr.title, webUrl: mr.webUrl, createdAt: Date()
+            ))
+        }
+
+        // CI change and comment notifications (only for opened MRs)
+        for mr in mrs {
             let prevMR = self.mrs.first { $0.iid == mr.iid && $0.projectId == mr.projectId }
 
-            // CI change notification
-            if let prev = prevMR,
+            // CI change notification (only for opened MRs)
+            if mr.state == "opened",
+               let prev = prevMR,
                let prevStatus = prev.headPipeline?.status,
                let currStatus = mr.headPipeline?.status,
                prevStatus != currStatus {
@@ -58,15 +75,13 @@ final class StateStore {
                 }
             }
 
-            // New comment notification
-            if let prev = prevMR, mr.notesCount > prev.notesCount {
+            // New comment notification (only for opened MRs)
+            if mr.state == "opened", let prev = prevMR, mr.notesCount > prev.notesCount {
                 newEvents.append(WatchEvent(
                     id: UUID(), kind: .newComment,
                     mrTitle: mr.title, webUrl: mr.webUrl, createdAt: Date()
                 ))
             }
-
-            _ = key  // suppress unused warning
         }
 
         for event in newEvents {
@@ -74,12 +89,32 @@ final class StateStore {
             case .ciFailure: "Pipeline échoué"
             case .ciSuccess: "Pipeline réussi"
             case .newComment: "Nouveau commentaire"
+            case .merged: event.mrTitle
+            }
+            let title: String = switch event.kind {
+            case .merged: "MR mergée 🎉"
+            default: event.mrTitle
             }
             let notifId = event.webUrl.replacingOccurrences(of: "/", with: "-") + "-\(event.kind)"
-            NotificationService.shared.notify(identifier: notifId, title: event.mrTitle, body: body, url: event.webUrl)
+            NotificationService.shared.notify(identifier: notifId, title: title, body: body, url: event.webUrl)
         }
 
-        self.mrs = mrs
+        // New merged MRs confirmed this poll (non-dismissed)
+        let newMergedFiltered = mergedMRs.filter { !dismissedKeys.contains(MRKey(projectId: $0.projectId, iid: $0.iid)) }
+        let newMergedKeys = Set(newMergedFiltered.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
+
+        // Previously merged MRs retained in memory (non-dismissed, not replaced by newly detected)
+        let previousMerged = self.mrs.filter {
+            $0.state == "merged" && !dismissedKeys.contains(MRKey(projectId: $0.projectId, iid: $0.iid))
+        }
+        let retainedPreviousMerged = previousMerged.filter { !newMergedKeys.contains(MRKey(projectId: $0.projectId, iid: $0.iid)) }
+
+        // Opened MRs from API (closed ones are silently dropped; filter dismissed)
+        let openedFiltered = mrs.filter {
+            $0.state != "closed" && !dismissedKeys.contains(MRKey(projectId: $0.projectId, iid: $0.iid))
+        }
+
+        self.mrs = openedFiltered + newMergedFiltered + retainedPreviousMerged
         self.approvals = approvals
         self.events = Array((newEvents + self.events).prefix(maxEvents))
     }
