@@ -6,6 +6,7 @@ struct MRWatcherApp: App {
     @State private var seenEventIds: Set<UUID> = []
 
     private let scheduler: PollingScheduler
+    private let setupController = SetupWindowController()
 
     init() {
         let s = StateStore()
@@ -26,7 +27,7 @@ struct MRWatcherApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(store: store, scheduler: scheduler) {
+            MenuBarView(store: store, scheduler: scheduler, setupController: setupController) {
                 seenEventIds.formUnion(store.events.map(\.id))
             }
         } label: {

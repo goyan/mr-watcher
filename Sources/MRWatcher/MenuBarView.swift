@@ -4,14 +4,14 @@ import AppKit
 struct MenuBarView: View {
     let store: StateStore
     let scheduler: PollingScheduler
+    let setupController: SetupWindowController
     let onClearEvents: () -> Void
-    @State private var showSetup: Bool = false
 
     var body: some View {
         headerSection
         Divider()
-        if store.isConfigured && !showSetup {
-            Button("⚙️ Configurer…") { showSetup = true }
+        if store.isConfigured {
+            Button("⚙️ Configurer…") { setupController.open(store: store, scheduler: scheduler) }
             Divider()
         }
         contentSection
@@ -38,21 +38,13 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var contentSection: some View {
-        if showSetup || !store.isConfigured {
-            SetupView(
-                onDismiss: store.isConfigured ? {
-                    showSetup = false
-                    store.lastError = nil
-                    store.lastErrorIsAuth = false
-                    Task { await scheduler.pollNow() }
-                } : nil,
-                onSaved: { store.isConfigured = ConfigManager.shared.isConfigured }
-            )
+        if !store.isConfigured {
+            Button("⚙️ Configuration requise…") { setupController.open(store: store, scheduler: scheduler) }
         } else {
             if let error = store.lastError {
                 Text("⚠️ \(error)").foregroundStyle(.red).font(.caption)
                 if store.lastErrorIsAuth {
-                    Button("Reconfigurer…") { showSetup = true }
+                    Button("Reconfigurer…") { setupController.open(store: store, scheduler: scheduler) }
                         .font(.caption)
                 }
                 Divider()
