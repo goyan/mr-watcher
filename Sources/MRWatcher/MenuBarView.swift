@@ -10,6 +10,10 @@ struct MenuBarView: View {
     var body: some View {
         headerSection
         Divider()
+        if store.isConfigured && !showSetup {
+            Button("⚙️ Configurer…") { showSetup = true }
+            Divider()
+        }
         contentSection
         Divider()
         Button("Quitter") { NSApplication.shared.terminate(nil) }
