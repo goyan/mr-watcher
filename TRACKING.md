@@ -46,6 +46,7 @@
 2. ~~F9 — label `[projet]`~~ ✅
 3. ~~Conflits — icône ⚠️ + masque bouton rebase~~ ✅
 4. ~~Build affected auto après rebase~~ ✅
-5. **B2** Ping Slack — en attente token bot Slack
-6. Tri MRs par urgence (CI❌ en premier)
-7. ~~Push github.com/goyan/mr-watcher~~ ✅
+5. ~~Surveillance MRs mergées (notification + badge + bouton Retirer)~~ ✅
+6. **B2** Ping Slack — en attente token bot Slack
+7. Tri MRs par urgence (CI❌ en premier)
+8. ~~Push github.com/goyan/mr-watcher~~ ✅

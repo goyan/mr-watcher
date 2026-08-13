@@ -19,7 +19,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F6 | Commits de retard sur target branch (`⬇N`) | ✅ done |
 | F7 | Âge de la MR (`Xj` / `Xh`) | ✅ done |
 | F8 | Badge DRAFT | ✅ done |
-| F9 | Label projet multi-repo (`[millenium]` / `[terragrunt]` / etc.) | 🔄 en cours |
+| F9 | Label projet multi-repo (`[millenium]` / `[terragrunt]` / etc.) | ✅ done |
 
 ### Actions
 
@@ -37,6 +37,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | N2 | Notification sur nouveau commentaire | ✅ done |
 | N3 | Badge numérique dans la barre de menu (non-lus) | ✅ done |
 | N4 | Déduplication des notifications (identifiant stable) | ✅ done |
+| N5 | Notification nouvelle approbation | ✅ done |
+| N6 | Notification MR prête (draft → ready) | ✅ done |
+| N7 | Notification MR mergée 🎉 | ✅ done |
 
 ### Infrastructure
 
@@ -56,6 +59,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | # | Feature | Priorité |
 |---|---------|----------|
 | B1 | ~~Feedback visuel après `/rebase` (succès / erreur)~~ | ✅ done |
+| J1 | Statut Jira par MR via `acli` shell-out | ✅ done |
 | B2 | Ping Slack depuis le menu (COPRO → #copro-daily-run, TRANSACTION → #transac-daily-run) | haute — en attente token Slack |
 | B3 | Filtrer/trier les MRs (par urgence : CI❌ > ⬇N > sans review) | moyenne |
 | B4 | Support multi-auteurs (reviewer assigné à moi) | basse |
