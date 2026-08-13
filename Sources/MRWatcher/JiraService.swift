@@ -8,42 +8,71 @@ struct JiraIssueStatus {
 
 @MainActor
 final class JiraService {
-    private let config: ConfigManager
-    private let session: URLSession
+    private let acliPath: String
 
     init(config: ConfigManager) {
-        self.config = config
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.timeoutIntervalForRequest = 10
-        self.session = URLSession(configuration: sessionConfig)
+        let candidates = ["/opt/homebrew/bin/acli", "/usr/local/bin/acli"]
+        acliPath = candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/opt/homebrew/bin/acli"
     }
 
+    var isAvailable: Bool { FileManager.default.isExecutableFile(atPath: acliPath) }
+
     func fetchIssueStatus(issueKey: String) async throws -> JiraIssueStatus {
-        guard let email = config.jiraEmail, let token = config.jiraToken else {
-            throw URLError(.userAuthenticationRequired)
-        }
-        let urlString = "https://fonciamillenium.atlassian.net/rest/api/3/issue/\(issueKey)?fields=status"
-        guard let url = URL(string: urlString) else { throw URLError(.badURL) }
-        var request = URLRequest(url: url)
-        let credentials = "\(email):\(token)"
-        let encoded = Data(credentials.utf8).base64EncodedString()
-        request.setValue("Basic \(encoded)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let path = acliPath
+        let data = try await withTaskCancellationHandler(
+            operation: {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                    let proc = Process()
+                    proc.executableURL = URL(fileURLWithPath: path)
+                    proc.arguments = ["jira", "workitem", "view", issueKey, "--fields", "status", "--json"]
+                    proc.environment = [
+                        "HOME": NSHomeDirectory(),
+                        "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+                    ]
+                    let outPipe = Pipe()
+                    let errPipe = Pipe()
+                    proc.standardOutput = outPipe
+                    proc.standardError = errPipe
+                    proc.terminationHandler = { p in
+                        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                        if p.terminationStatus == 0 {
+                            continuation.resume(returning: outData)
+                        } else {
+                            let errMsg = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "acli error"
+                            continuation.resume(throwing: URLError(.badServerResponse, userInfo: [NSLocalizedDescriptionKey: errMsg]))
+                        }
+                    }
+                    do {
+                        try proc.run()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            },
+            onCancel: {
+                // Process terminates naturally when the continuation is abandoned
+            }
+        )
 
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
+        struct Response: Codable {
+            struct Fields: Codable {
+                struct Status: Codable {
+                    let name: String
+                    struct Category: Codable {
+                        let key: String
+                    }
+                    let statusCategory: Category
+                }
+                let status: Status
+            }
+            let fields: Fields
         }
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let fields = json["fields"] as? [String: Any],
-              let status = fields["status"] as? [String: Any],
-              let name = status["name"] as? String,
-              let statusCategory = status["statusCategory"] as? [String: Any],
-              let categoryKey = statusCategory["key"] as? String else {
-            throw URLError(.cannotParseResponse)
-        }
-
-        return JiraIssueStatus(name: name, categoryKey: categoryKey, isStale: categoryKey == "done")
+        let decoded = try JSONDecoder().decode(Response.self, from: data)
+        let categoryKey = decoded.fields.status.statusCategory.key
+        return JiraIssueStatus(
+            name: decoded.fields.status.name,
+            categoryKey: categoryKey,
+            isStale: categoryKey == "done"
+        )
     }
 }

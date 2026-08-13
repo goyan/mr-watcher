@@ -4,14 +4,14 @@ import Foundation
 final class PollingScheduler {
     private let store: StateStore
     private let gitlab: GitLabService
-    private let jira: JiraService?
+    private let jira: JiraService
     private var task: Task<Void, Never>?
 
     private var intervalSeconds: Int {
         max(15, UserDefaults.standard.integer(forKey: "pollIntervalSeconds").atLeast(60))
     }
 
-    init(store: StateStore, gitlab: GitLabService, jira: JiraService? = nil) {
+    init(store: StateStore, gitlab: GitLabService, jira: JiraService) {
         self.store = store
         self.gitlab = gitlab
         self.jira = jira
@@ -82,7 +82,7 @@ final class PollingScheduler {
         await PollingScheduler.poll(store: store, gitlab: gitlab, jira: jira)
     }
 
-    private static func poll(store: StateStore, gitlab: GitLabService, jira: JiraService?) async {
+    private static func poll(store: StateStore, gitlab: GitLabService, jira: JiraService) async {
         await MainActor.run { store.isLoading = true; store.lastError = nil; store.lastErrorIsAuth = false }
         do {
             let mrs = try await gitlab.fetchMyOpenMRs()
@@ -122,7 +122,7 @@ final class PollingScheduler {
             }
 
             var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
-            if let jira {
+            if jira.isAvailable {
                 for mr in enrichedMRs {
                     if Task.isCancelled { return }
                     guard let issueKey = extractProdTicket(from: mr) else { continue }

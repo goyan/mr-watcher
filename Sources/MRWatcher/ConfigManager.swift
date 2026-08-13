@@ -11,14 +11,10 @@ final class ConfigManager {
     private(set) var gitlabPAT: String?
     private(set) var gitlabHost: String = ""
     private(set) var gitlabUsername: String?
-    private(set) var jiraEmail: String?
-    private(set) var jiraToken: String?
 
     var isConfigured: Bool {
         gitlabPAT != nil && gitlabUsername != nil
     }
-
-    var isJiraConfigured: Bool { jiraEmail != nil && jiraToken != nil }
 
     private init() {
         reload()
@@ -30,8 +26,6 @@ final class ConfigManager {
         let rawHost = envValues["GITLAB_HOST"] ?? keychainValue(forKey: "GITLAB_HOST") ?? defaultHost
         gitlabHost = normalizeHost(rawHost)
         gitlabUsername = envValues["GITLAB_USERNAME"] ?? keychainValue(forKey: "GITLAB_USERNAME")
-        jiraEmail = envValues["JIRA_EMAIL"]
-        jiraToken = envValues["JIRA_API_TOKEN"]
     }
 
     private func normalizeHost(_ raw: String) -> String {
