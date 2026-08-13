@@ -61,17 +61,14 @@ struct MenuBarView: View {
     @ViewBuilder
     private var eventsSection: some View {
         if !store.events.isEmpty {
-            HStack {
-                Text("Événements récents").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Effacer") { onClearEvents(); store.clearEvents() }
-                    .font(.caption).buttonStyle(.borderless)
-            }
+            Text("Événements récents").font(.caption).foregroundStyle(.secondary)
             ForEach(store.events.prefix(5)) { event in
                 Button(action: { openURL(event.webUrl) }) {
                     Label(truncated(event.mrTitle, 48), systemImage: eventIcon(event.kind))
                 }
             }
+            Button("✕ Effacer les événements") { onClearEvents(); store.clearEvents() }
+                .font(.caption)
             Divider()
         }
     }

@@ -32,6 +32,17 @@ final class StateStore {
     var isConfigured: Bool = ConfigManager.shared.isConfigured
 
     private let maxEvents = 50
+    private var seenEventKeys: Set<String> = []
+
+    private func eventKey(projectId: Int, iid: Int, kind: WatchEventKind) -> String {
+        let kindStr: String = switch kind {
+        case .ciFailure: "ciFailure"
+        case .ciSuccess: "ciSuccess"
+        case .newComment: "newComment"
+        case .merged: "merged"
+        }
+        return "\(projectId)-\(iid)-\(kindStr)"
+    }
 
     func dismiss(key: MRKey) {
         dismissedKeys.insert(key)
@@ -45,6 +56,9 @@ final class StateStore {
         for mr in mergedMRs {
             let key = MRKey(projectId: mr.projectId, iid: mr.iid)
             guard !dismissedKeys.contains(key) else { continue }
+            let ek = eventKey(projectId: mr.projectId, iid: mr.iid, kind: .merged)
+            guard !seenEventKeys.contains(ek) else { continue }
+            seenEventKeys.insert(ek)
             newEvents.append(WatchEvent(
                 id: UUID(), kind: .merged,
                 mrTitle: mr.title, webUrl: mr.webUrl, createdAt: Date()
@@ -67,6 +81,7 @@ final class StateStore {
                 default: nil
                 }
                 if let kind {
+                    // prevStatus != currStatus is already a natural guard; no seenEventKeys needed.
                     newEvents.append(WatchEvent(
                         id: UUID(), kind: kind,
                         mrTitle: mr.title,
@@ -77,6 +92,7 @@ final class StateStore {
             }
 
             // New comment notification (only for opened MRs)
+            // notesCount > prev.notesCount is already a natural guard; no seenEventKeys needed.
             if mr.state == "opened", let prev = prevMR, mr.notesCount > prev.notesCount {
                 newEvents.append(WatchEvent(
                     id: UUID(), kind: .newComment,
@@ -120,5 +136,9 @@ final class StateStore {
         self.events = Array((newEvents + self.events).prefix(maxEvents))
     }
 
-    func clearEvents() { events = [] }
+    func clearEvents() {
+        events = []
+        // seenEventKeys is intentionally NOT cleared: it is a dedup memory,
+        // not a display cache. Clearing it would cause re-notifications on the next poll.
+    }
 }
