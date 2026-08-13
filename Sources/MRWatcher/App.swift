@@ -10,7 +10,8 @@ struct MRWatcherApp: App {
     init() {
         let s = StateStore()
         let svc = GitLabService(config: .shared)
-        let sched = PollingScheduler(store: s, gitlab: svc)
+        let jira = JiraService(config: .shared)
+        let sched = PollingScheduler(store: s, gitlab: svc, jira: jira)
         _store = State(initialValue: s)
         scheduler = sched
         Task {

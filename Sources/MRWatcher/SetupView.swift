@@ -6,6 +6,8 @@ struct SetupView: View {
     @State private var pat: String = ""
     @State private var host: String = ConfigManager.shared.gitlabHost
     @State private var username: String = ConfigManager.shared.gitlabUsername ?? ""
+    @State private var jiraEmail: String = ConfigManager.shared.jiraEmail ?? ""
+    @State private var jiraToken: String = ""
     @State private var saved = false
     @State private var errorMsg: String? = nil
 
@@ -18,6 +20,11 @@ struct SetupView: View {
         TextField("GITLAB_HOST", text: $host)
 
         TextField("GITLAB_USERNAME", text: $username)
+
+        Divider()
+        Text("Jira (optionnel)").font(.caption).foregroundStyle(.secondary)
+        TextField("JIRA_EMAIL", text: $jiraEmail)
+        SecureField("JIRA_API_TOKEN", text: $jiraToken)
 
         if let err = errorMsg {
             Text("⚠️ \(err)").foregroundStyle(.red).font(.caption)
@@ -60,11 +67,16 @@ struct SetupView: View {
                     !line.hasPrefix("GITLAB_USERNAME=") &&
                     !line.hasPrefix("export GITLAB_PAT=") &&
                     !line.hasPrefix("export GITLAB_HOST=") &&
-                    !line.hasPrefix("export GITLAB_USERNAME=")
+                    !line.hasPrefix("export GITLAB_USERNAME=") &&
+                    // Ne filtrer Jira que si on va réécrire la valeur
+                    (!jiraEmail.isEmpty ? !line.hasPrefix("JIRA_EMAIL=") && !line.hasPrefix("export JIRA_EMAIL=") : true) &&
+                    (!jiraToken.isEmpty ? !line.hasPrefix("JIRA_API_TOKEN=") && !line.hasPrefix("export JIRA_API_TOKEN=") : true)
                 }
             content = lines.joined(separator: "\n")
             if !content.hasSuffix("\n") && !content.isEmpty { content += "\n" }
             content += "GITLAB_PAT=\(pat)\nGITLAB_HOST=\(h)\nGITLAB_USERNAME=\(username)\n"
+            if !jiraEmail.isEmpty { content += "JIRA_EMAIL=\(jiraEmail)\n" }
+            if !jiraToken.isEmpty { content += "JIRA_API_TOKEN=\(jiraToken)\n" }
             // Bug 2: create file with 0600 before write so the new inode never has 0644
             if !fm.fileExists(atPath: envPath) {
                 fm.createFile(atPath: envPath, contents: nil, attributes: [.posixPermissions: 0o600])

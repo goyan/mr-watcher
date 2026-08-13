@@ -184,7 +184,21 @@ struct MenuBarView: View {
         // Âge
         parts.append(ageString(mr.createdAt))
 
+        // Statut Jira
+        if let jira = store.jiraStatuses[key] {
+            let icon = jira.isStale ? "⚠️PROD" : jiraEmoji(jira.categoryKey)
+            parts.append("[\(icon) \(jira.name)]")
+        }
+
         return parts.joined(separator: "  ")
+    }
+
+    private func jiraEmoji(_ categoryKey: String) -> String {
+        switch categoryKey {
+        case "done": return "🟢"
+        case "new":  return "🔵"
+        default:     return "🟡"   // indeterminate = en cours
+        }
     }
 
     // MARK: - Helpers

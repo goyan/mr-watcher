@@ -4,22 +4,24 @@ import Foundation
 final class PollingScheduler {
     private let store: StateStore
     private let gitlab: GitLabService
+    private let jira: JiraService?
     private var task: Task<Void, Never>?
 
     private var intervalSeconds: Int {
         max(15, UserDefaults.standard.integer(forKey: "pollIntervalSeconds").atLeast(60))
     }
 
-    init(store: StateStore, gitlab: GitLabService) {
+    init(store: StateStore, gitlab: GitLabService, jira: JiraService? = nil) {
         self.store = store
         self.gitlab = gitlab
+        self.jira = jira
     }
 
     func start() {
         stop()
-        task = Task { [store, gitlab] in
+        task = Task { [store, gitlab, jira] in
             while !Task.isCancelled {
-                await PollingScheduler.poll(store: store, gitlab: gitlab)
+                await PollingScheduler.poll(store: store, gitlab: gitlab, jira: jira)
                 try? await Task.sleep(for: .seconds(Double(intervalSeconds)))
             }
         }
@@ -77,10 +79,10 @@ final class PollingScheduler {
 
     func pollNow() async {
         guard !store.isLoading else { return }
-        await PollingScheduler.poll(store: store, gitlab: gitlab)
+        await PollingScheduler.poll(store: store, gitlab: gitlab, jira: jira)
     }
 
-    private static func poll(store: StateStore, gitlab: GitLabService) async {
+    private static func poll(store: StateStore, gitlab: GitLabService, jira: JiraService?) async {
         await MainActor.run { store.isLoading = true; store.lastError = nil; store.lastErrorIsAuth = false }
         do {
             let mrs = try await gitlab.fetchMyOpenMRs()
@@ -119,8 +121,21 @@ final class PollingScheduler {
                 // If state == "closed" → ignore silently
             }
 
+            var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
+            if let jira {
+                for mr in enrichedMRs {
+                    if Task.isCancelled { return }
+                    guard let issueKey = extractProdTicket(from: mr) else { continue }
+                    let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                    if let status = try? await jira.fetchIssueStatus(issueKey: issueKey) {
+                        newJiraStatuses[key] = status
+                    }
+                }
+            }
+
             await MainActor.run {
                 store.update(mrs: enrichedMRs, mergedMRs: mergedMRs, approvals: approvals)
+                store.jiraStatuses = newJiraStatuses
                 store.isLoading = false
             }
         } catch {
@@ -135,4 +150,12 @@ final class PollingScheduler {
 
 private extension Int {
     func atLeast(_ minimum: Int) -> Int { self <= 0 ? minimum : self }
+}
+
+private func extractProdTicket(from mr: MRSummary) -> String? {
+    func find(in s: String) -> String? {
+        guard let range = s.range(of: #"PROD-\d+"#, options: .regularExpression) else { return nil }
+        return String(s[range])
+    }
+    return find(in: mr.sourceBranch) ?? find(in: mr.title)
 }

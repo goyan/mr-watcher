@@ -28,6 +28,7 @@ final class StateStore {
     var lastError: String? = nil
     var lastErrorIsAuth: Bool = false
     var dismissedKeys: Set<MRKey> = []
+    var jiraStatuses: [MRKey: JiraIssueStatus] = [:]
 
     var isConfigured: Bool = ConfigManager.shared.isConfigured
 
