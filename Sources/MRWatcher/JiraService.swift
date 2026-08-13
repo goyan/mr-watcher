@@ -18,6 +18,9 @@ final class JiraService {
     var isAvailable: Bool { FileManager.default.isExecutableFile(atPath: acliPath) }
 
     func fetchIssueStatus(issueKey: String) async throws -> JiraIssueStatus {
+        guard issueKey.range(of: #"^[A-Z][A-Z0-9]{1,20}-[0-9]{1,10}$"#, options: .regularExpression) != nil else {
+            throw URLError(.badURL)
+        }
         let path = acliPath
         let data = try await withTaskCancellationHandler(
             operation: {
