@@ -11,11 +11,12 @@ struct WatchEvent: Identifiable {
     let kind: WatchEventKind
     let mrTitle: String
     let webUrl: String
+    let mrIid: Int
     let createdAt: Date
 }
 
 enum WatchEventKind {
-    case ciFailure, ciSuccess, newComment, merged
+    case ciFailure, ciSuccess, newComment, merged, newApproval, mrReady
 }
 
 @MainActor
@@ -41,6 +42,8 @@ final class StateStore {
         case .ciSuccess: "ciSuccess"
         case .newComment: "newComment"
         case .merged: "merged"
+        case .newApproval: "newApproval"
+        case .mrReady: "mrReady"
         }
         return "\(projectId)-\(iid)-\(kindStr)"
     }
@@ -62,7 +65,7 @@ final class StateStore {
             seenEventKeys.insert(ek)
             newEvents.append(WatchEvent(
                 id: UUID(), kind: .merged,
-                mrTitle: mr.title, webUrl: mr.webUrl, createdAt: Date()
+                mrTitle: mr.title, webUrl: mr.webUrl, mrIid: mr.iid, createdAt: Date()
             ))
         }
 
@@ -87,7 +90,7 @@ final class StateStore {
                         id: UUID(), kind: kind,
                         mrTitle: mr.title,
                         webUrl: mr.headPipeline?.webUrl ?? mr.webUrl,
-                        createdAt: Date()
+                        mrIid: mr.iid, createdAt: Date()
                     ))
                 }
             }
@@ -97,7 +100,26 @@ final class StateStore {
             if mr.state == "opened", let prev = prevMR, mr.notesCount > prev.notesCount {
                 newEvents.append(WatchEvent(
                     id: UUID(), kind: .newComment,
-                    mrTitle: mr.title, webUrl: mr.webUrl, createdAt: Date()
+                    mrTitle: mr.title, webUrl: mr.webUrl, mrIid: mr.iid, createdAt: Date()
+                ))
+            }
+
+            // New approval notification
+            let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+            if !dismissedKeys.contains(key),
+               let prevAppr = self.approvals[key], let currAppr = approvals[key],
+               currAppr.given > prevAppr.given {
+                newEvents.append(WatchEvent(
+                    id: UUID(), kind: .newApproval,
+                    mrTitle: mr.title, webUrl: mr.webUrl, mrIid: mr.iid, createdAt: Date()
+                ))
+            }
+
+            // MR ready (draft → non-draft)
+            if let prev = prevMR, prev.isDraft, !mr.isDraft {
+                newEvents.append(WatchEvent(
+                    id: UUID(), kind: .mrReady,
+                    mrTitle: mr.title, webUrl: mr.webUrl, mrIid: mr.iid, createdAt: Date()
                 ))
             }
         }
@@ -108,9 +130,13 @@ final class StateStore {
             case .ciSuccess: "Pipeline réussi"
             case .newComment: "Nouveau commentaire"
             case .merged: event.mrTitle
+            case .newApproval: "La MR a été approuvée."
+            case .mrReady: "La MR n'est plus en draft."
             }
             let title: String = switch event.kind {
             case .merged: "MR mergée 🎉"
+            case .newApproval: "Approbation reçue — !\(event.mrIid)"
+            case .mrReady: "MR prête — !\(event.mrIid)"
             default: event.mrTitle
             }
             let notifId = event.webUrl.replacingOccurrences(of: "/", with: "-") + "-\(event.kind)"

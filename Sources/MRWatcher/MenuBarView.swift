@@ -239,10 +239,12 @@ struct MenuBarView: View {
 
     private func eventIcon(_ kind: WatchEventKind) -> String {
         switch kind {
-        case .ciFailure:  return "xmark.circle.fill"
-        case .ciSuccess:  return "checkmark.circle.fill"
-        case .newComment: return "bubble.left.fill"
-        case .merged:     return "checkmark.seal.fill"
+        case .ciFailure:   return "xmark.circle.fill"
+        case .ciSuccess:   return "checkmark.circle.fill"
+        case .newComment:  return "bubble.left.fill"
+        case .merged:      return "checkmark.seal.fill"
+        case .newApproval: return "hand.thumbsup.fill"
+        case .mrReady:     return "checkmark.circle.fill"
         }
     }
 
