@@ -22,6 +22,7 @@ final class SetupWindowController: NSObject {
             },
             onSaved: {
                 store.isConfigured = ConfigManager.shared.isConfigured
+                Task { await scheduler.pollNow() }
             }
         )
         let hosting = NSHostingController(rootView: content)
