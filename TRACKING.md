@@ -2,7 +2,7 @@
 
 ## État actuel
 
-- **Version** : 0.5.1 (release de test Sparkle)
+- **Version** : 0.5.2
 - **Build** : ✅ `swift build -c release`, bundle Sparkle et archives signées publiés
 - **Installé** : `/Applications/MRWatcher.app` (codesign ad-hoc)
 - **PAT** : configuré dans `~/.env` (token glab Millenium)
@@ -56,7 +56,7 @@
 | Sparkle 2.9 intégré via SwiftPM | ✅ |
 | Commande `Rechercher les mises à jour...` avec UI native Sparkle | ✅ |
 | Bundle `MRWatcher.app` avec `Sparkle.framework`, feed signé et vérification avant extraction | ✅ |
-| Helper `scripts/release.sh <version>` : build SwiftPM propre, ZIP/feed signés et vérifiés, DMG manuel | ✅ publié en v0.5.0, test v0.5.1 |
+| Helper `scripts/release.sh <version>` : build SwiftPM propre, ZIP/feed signés et vérifiés, DMG manuel | ✅ publié en v0.5.2 |
 | Sauvegarde EdDSA chiffrée AES-256 | ✅ script opt-in, support hors ligne privé requis |
 | Sécurité runtime | ✅ PAT bloqué sur redirection inter-origine, `.env` régulier propriétaire en 0600 |
 | Version installée dans le pied de la fenêtre principale | ✅ |
