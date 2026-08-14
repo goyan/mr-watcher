@@ -28,6 +28,7 @@ Pour chaque MR ouverte, affiche en temps réel :
 - **↩ /rebase (N commits)** — rebase via quick action GitLab (préserve les approbations), déclenche automatiquement le job `build affected`
 - **✕ Retirer** — retire une MR mergée de la liste
 - **⚙️ Configurer…** — ouvre le panneau de configuration
+- **⚙️ Intervalle d'actualisation** — choisit la période de poll (15 s à 10 min), redémarre le scheduler
 - **Rechercher les mises à jour…** — vérifie et installe une release Sparkle signée
 
 ### Notifications macOS
@@ -133,11 +134,19 @@ Le statut Jira est récupéré via `acli` (Atlassian CLI) — aucune configurati
 
 ## Intervalle de poll
 
-Par défaut 60 secondes. Configurable via :
+Par défaut 60 secondes. Réglable depuis la fenêtre principale : **⚙️ → Intervalle d'actualisation**
+(15 s · 30 s · 1 min · 2 min · 5 min · 10 min). Le choix est persisté dans `UserDefaults` et le
+scheduler redémarre immédiatement.
+
+Équivalent en ligne de commande — l'intervalle est relu à chaque cycle, la nouvelle valeur
+s'applique donc dès le poll suivant :
 
 ```bash
 defaults write MRWatcher pollIntervalSeconds 30
 ```
+
+Le plancher est de 15 secondes : toute valeur inférieure est ramenée à 15, et `0` (clé absente)
+retombe sur 60.
 
 ## Stack
 

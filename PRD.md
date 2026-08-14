@@ -31,6 +31,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | A1 | Clic → ouvre la MR dans le navigateur | ✅ done |
 | A2 | `/rebase` via API GitLab (sans perdre les approbations) | ✅ done |
 | A3 | Rafraîchir manuellement | ✅ done |
+| A4 | Intervalle de poll réglable depuis l'UI (⚙️ → 15 s…10 min, redémarrage du scheduler) | ✅ done |
 
 ### Notifications
 
@@ -72,5 +73,5 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | B2 | Ping Slack depuis le menu (COPRO → #copro-daily-run, TRANSACTION → #transac-daily-run) | haute — en attente token Slack |
 | B3 | Filtrer/trier les MRs (par urgence : CI❌ > ⬇N > sans review) | moyenne |
 | B4 | Support multi-auteurs (reviewer assigné à moi) | basse |
-| B5 | Intervalle de poll configurable via UI | basse |
+| B5 | ~~Intervalle de poll configurable via UI~~ | ✅ done — A4 |
 | B6 | Login Items automatique à l'installation | basse |

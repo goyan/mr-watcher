@@ -12,28 +12,41 @@ Après chaque agent `coder`, lancer un agent `code-reviewer` associé.
 ### Stack
 
 - Swift 5.9, SwiftUI `MenuBarExtra(.menu)`, macOS 14+
-- Swift Package Manager, zéro dépendance externe
+- Swift Package Manager — une seule dépendance externe : Sparkle `2.9.5` (`.upToNextMinor`), pour les mises à jour signées EdDSA
 - `@Observable @MainActor` pour le state (`StateStore`, `PollingScheduler`)
 - `URLSessionConfiguration.ephemeral` (pas de cache disque du PAT)
 
 ### Conventions
 
 - Ne jamais éditer directement les `.swift` — toujours via agent `coder`
-- Après chaque `coder`, lancer `swift build -c release` pour vérifier
+- Après chaque `coder`, lancer `swift build -c release` puis `swift test` pour vérifier
 - Après build propre, lancer `bash install.sh` pour déployer
 - Ne jamais committer de PAT ou credentials
+- Ne jamais committer la clé privée EdDSA (trousseau, compte `com.goyan.mrwatcher.updates`)
 
 ### Architecture
 
 ```
 Sources/MRWatcher/
-├── App.swift               — @main, MenuBarExtra, badge non-lus
-├── ConfigManager.swift     — lit GITLAB_PAT/HOST/USERNAME depuis ~/.env ou Keychain
-├── GitLabService.swift     — URLSession async, GitLab API v4
-├── PollingScheduler.swift  — poll toutes les N secondes (UserDefaults pollIntervalSeconds)
-├── StateStore.swift        — @Observable @MainActor, diff CI/commentaires → events
-├── NotificationService.swift — UserNotifications macOS
-└── MenuBarView.swift       — SwiftUI, liste MRs enrichies
+├── App.swift                  — @main, WindowGroup + MenuBarExtra(.menu), badge non-lus, activation .regular
+├── ConfigManager.swift        — lit GITLAB_PAT/HOST/USERNAME depuis ~/.env ou Keychain (.env : régulier, 0600)
+├── GitLabService.swift        — URLSession ephemeral async, GitLab API v4, PAT bloqué sur redirection inter-origine
+├── JiraService.swift          — statut Jira par ticket via shell-out `acli` (issueKey validé)
+├── PollingScheduler.swift     — poll toutes les N secondes (UserDefaults pollIntervalSeconds, plancher 15 s, défaut 60 s)
+├── StateStore.swift           — @Observable @MainActor, diff CI/commentaires/approbations → events
+├── NotificationService.swift  — UserNotifications macOS
+├── MenuBarView.swift          — SwiftUI, menu de la barre de menus, liste MRs enrichies
+├── StatusView.swift           — fenêtre principale (Dock) : tableau MRs, menu ⚙️, intervalle, version installée
+├── SetupView.swift            — formulaire de configuration (PAT masqué)
+├── SetupWindowController.swift — NSPanel hébergeant SetupView
+└── UpdaterController.swift    — Sparkle `SPUStandardUpdaterController`, « Rechercher les mises à jour... »
+
+Tests/MRWatcherTests/
+└── RuntimeSecurityTests.swift — garde-fous sécurité runtime (redirection PAT, permissions .env)
+
+scripts/
+├── release.sh             — build SwiftPM propre, ZIP + DMG, signature et vérification de l'appcast
+└── backup-update-key.sh   — export chiffré AES-256 de la clé EdDSA vers un support hors ligne
 ```
 
 ### GitLab API
