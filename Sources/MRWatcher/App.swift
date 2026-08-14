@@ -15,6 +15,7 @@ struct MRWatcherApp: App {
 
     private let scheduler: PollingScheduler
     private let setupController = SetupWindowController()
+    private let updaterController = UpdaterController()
 
     init() {
         let s = StateStore()
@@ -38,7 +39,8 @@ struct MRWatcherApp: App {
             StatusView(
                 store: store,
                 scheduler: scheduler,
-                setupController: setupController
+                setupController: setupController,
+                updaterController: updaterController
             )
         }
 

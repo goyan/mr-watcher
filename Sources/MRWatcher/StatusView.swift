@@ -5,6 +5,7 @@ struct StatusView: View {
     let store: StateStore
     let scheduler: PollingScheduler
     let setupController: SetupWindowController
+    let updaterController: UpdaterController
 
     @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 60
     @State private var hoveredAction: MRKey?
@@ -20,6 +21,15 @@ struct StatusView: View {
         store.mrs
             .filter { $0.state == "merged" }
             .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var appVersion: String {
+        guard let version = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String, !version.isEmpty else {
+            return "Version indisponible"
+        }
+        return "v\(version)"
     }
 
     var body: some View {
@@ -118,6 +128,10 @@ struct StatusView: View {
 
             Divider()
 
+            Button("Rechercher les mises à jour...") {
+                updaterController.checkForUpdates()
+            }
+
             Button("Quitter") {
                 NSApplication.shared.terminate(nil)
             }
@@ -205,6 +219,11 @@ struct StatusView: View {
 
             Spacer()
 
+            Text(appVersion)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Text("·")
+                .foregroundStyle(.tertiary)
             Text("Actualisation : \(intervalDescription(pollIntervalSeconds))")
                 .font(.callout)
                 .foregroundStyle(.secondary)

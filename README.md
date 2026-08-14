@@ -28,6 +28,7 @@ Pour chaque MR ouverte, affiche en temps réel :
 - **↩ /rebase (N commits)** — rebase via quick action GitLab (préserve les approbations), déclenche automatiquement le job `build affected`
 - **✕ Retirer** — retire une MR mergée de la liste
 - **⚙️ Configurer…** — ouvre le panneau de configuration
+- **Rechercher les mises à jour…** — vérifie et installe une release Sparkle signée
 
 ### Notifications macOS
 
@@ -61,6 +62,29 @@ Configurer le PAT GitLab via **⚙️ Configurer…** dans le menu de l'app.
 
 > **Note** : l'app est signée ad-hoc (pas notarisée Apple). Au premier lancement : clic droit → Ouvrir.
 
+## Releases et mises à jour
+
+Les mises à jour en application utilisent Sparkle et une signature EdDSA stockée dans le trousseau
+de connexion macOS, sous le compte `com.goyan.mrwatcher.updates`. Ne supprimez pas cette clé :
+elle est nécessaire pour signer les releases futures, mais ne doit jamais être exportée ou ajoutée
+au dépôt.
+
+Pour préparer une release :
+
+```bash
+bash scripts/release.sh 0.5.0
+```
+
+Le script produit `dist/MRWatcher-v0.5.0.zip` pour Sparkle et
+`dist/MRWatcher-v0.5.0.dmg` pour l'installation manuelle, puis remplace `appcast.xml` par
+l'entrée de la release et met `VERSION` à jour. Publiez d'abord les deux archives dans la release
+GitHub `v0.5.0`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP disponible.
+Le ZIP doit rester inchangé après signature.
+
+Un abonnement Apple Developer n'est pas nécessaire pour la signature EdDSA Sparkle. En revanche,
+l'absence de signature Developer ID et de notarisation laisse Gatekeeper demander une autorisation
+lors de la première installation.
+
 ## Configuration
 
 Variables lues depuis `~/.env` :
@@ -84,5 +108,5 @@ defaults write MRWatcher pollIntervalSeconds 30
 ## Stack
 
 - Swift 5.9 · SwiftUI `MenuBarExtra` · macOS 14+
-- Swift Package Manager · zéro dépendance externe
+- Swift Package Manager · Sparkle 2.9 pour les mises à jour signées
 - GitLab API v4 · Atlassian `acli` (Jira)

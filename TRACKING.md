@@ -2,8 +2,8 @@
 
 ## État actuel
 
-- **Version** : 1.0-dev
-- **Build** : ✅ `swift build -c release` propre
+- **Version** : 0.4.1, préparation de 0.5.0
+- **Build** : ✅ `swift build -c release`, bundle Sparkle et archives signées vérifiés
 - **Installé** : `/Applications/MRWatcher.app` (codesign ad-hoc)
 - **PAT** : configuré dans `~/.env` (token glab Millenium)
 
@@ -47,6 +47,27 @@
 
 ---
 
+## Session 2026-08-14
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| Sparkle 2.9 intégré via SwiftPM | ✅ |
+| Commande `Rechercher les mises à jour...` avec UI native Sparkle | ✅ |
+| Bundle `MRWatcher.app` avec `Sparkle.framework`, appcast et signature ad-hoc | ✅ |
+| Helper `scripts/release.sh <version>` : ZIP signé, DMG manuel, appcast | ✅ |
+| Version installée dans le pied de la fenêtre principale | ✅ |
+
+### Limites connues
+
+| Sujet | Détail |
+|-------|--------|
+| Gatekeeper | Sans compte Apple Developer, la première installation non notarisée peut nécessiter clic droit → Ouvrir. |
+| Clé EdDSA | La clé privée reste dans le trousseau de connexion sous `com.goyan.mrwatcher.updates`; sa perte empêche de signer les releases suivantes. |
+
+---
+
 ## Prochaines étapes suggérées
 
 1. ~~Feedback `/rebase`~~ ✅
@@ -57,3 +78,4 @@
 6. **B2** Ping Slack — en attente token bot Slack
 7. Tri MRs par urgence (CI❌ en premier)
 8. ~~Push github.com/goyan/mr-watcher~~ ✅
+9. Publier une première release Sparkle signée (`appcast.xml` + ZIP + DMG)
