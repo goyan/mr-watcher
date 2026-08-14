@@ -236,7 +236,7 @@ struct StatusView: View {
             .help("Ouvrir !\(mr.iid) dans GitLab")
 
             trailingActions(for: mr)
-                .frame(width: 210, alignment: .trailing)
+                .frame(width: 250, alignment: .trailing)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 3)
@@ -254,11 +254,15 @@ struct StatusView: View {
     @ViewBuilder
     private func trailingActions(for mr: MRSummary) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
-                jiraMetadata(jira, isOpen: mr.state == "opened")
+            Group {
+                if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
+                    jiraMetadata(jira, isOpen: mr.state == "opened")
+                }
             }
+            .frame(width: 132, alignment: .leading)
 
             actionButton(for: mr)
+                .frame(width: 108, alignment: .trailing)
         }
         .font(.system(.callout, design: .monospaced))
         .lineLimit(1)

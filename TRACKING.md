@@ -43,6 +43,7 @@
 | K11 | ~~MR mergée avant l'installation absente~~ | ✅ 10 dernières MRs mergées rechargées au démarrage |
 | K12 | Icône générique dans le Dock lors de l'affichage de la configuration | ✅ icône bundle générée depuis `Assets/AppIcon.png` à l'installation |
 | K13 | Application absente du Dock hors de la configuration | ✅ politique d'activation macOS `.regular` au lancement |
+| K14 | Statuts Jira et actions de ligne désalignés | ✅ statut Jira aligné à gauche, colonne Actions élargie pour afficher `/rebase` entièrement |
 
 ---
 
