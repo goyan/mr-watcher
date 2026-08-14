@@ -7,6 +7,8 @@ struct StatusView: View {
     let setupController: SetupWindowController
 
     @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 60
+    @State private var hoveredAction: MRKey?
+    @State private var hoveredMR: MRKey?
 
     private var openedMRs: [MRSummary] {
         store.mrs
@@ -213,7 +215,8 @@ struct StatusView: View {
     }
 
     private func mrRow(_ mr: MRSummary) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+        return HStack(alignment: .top, spacing: 8) {
             Button {
                 openURL(mr.webUrl)
             } label: {
@@ -232,28 +235,75 @@ struct StatusView: View {
             .buttonStyle(.plain)
             .help("Ouvrir !\(mr.iid) dans GitLab")
 
+            trailingActions(for: mr)
+                .frame(width: 210, alignment: .trailing)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 3)
+        .background {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(hoveredMR == key ? Color.secondary.opacity(0.10) : .clear)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 4))
+        .onHover { isHovering in
+            hoveredMR = isHovering ? key : nil
+            isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
+        }
+    }
+
+    @ViewBuilder
+    private func trailingActions(for mr: MRSummary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
+                jiraMetadata(jira, isOpen: mr.state == "opened")
+            }
+
             actionButton(for: mr)
         }
-        .padding(.vertical, 3)
+        .font(.system(.callout, design: .monospaced))
+        .lineLimit(1)
     }
 
     @ViewBuilder
     private func actionButton(for mr: MRSummary) -> some View {
+        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
         if mr.state == "merged" {
             Button {
-                store.dismiss(key: MRKey(projectId: mr.projectId, iid: mr.iid))
+                store.dismiss(key: key)
             } label: {
                 Image(systemName: "xmark")
+                    .frame(width: 16, height: 16)
+                    .padding(2)
+                    .background {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(hoveredAction == key ? Color.secondary.opacity(0.18) : .clear)
+                    }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 4))
+            .onHover { isHovering in
+                hoveredAction = isHovering ? key : nil
+                isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
+            }
             .help("Retirer !\(mr.iid) de la liste")
         } else if let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
             Button {
                 confirmRebase(for: mr)
             } label: {
                 Label("/rebase", systemImage: "arrow.triangle.2.circlepath")
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(hoveredAction == key ? Color.secondary.opacity(0.18) : .clear)
+                    }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 4))
+            .onHover { isHovering in
+                hoveredAction = isHovering ? key : nil
+                isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
+            }
             .help("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
         }
     }
@@ -270,12 +320,6 @@ struct StatusView: View {
             }
 
             stateMetadata(for: mr)
-
-            Spacer(minLength: 8)
-
-            if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
-                jiraMetadata(jira, isOpen: mr.state == "opened")
-            }
         }
         .font(.system(.callout, design: .monospaced))
         .lineLimit(1)
