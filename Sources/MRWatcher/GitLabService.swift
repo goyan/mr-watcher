@@ -102,6 +102,29 @@ final class GitLabService {
         return try decoder.decode([MRSummary].self, from: data)
     }
 
+    func fetchMyRecentlyMergedMRs() async throws -> [MRSummary] {
+        let (pat, username) = await MainActor.run { (config.gitlabPAT, config.gitlabUsername) }
+        guard let pat, let username else { throw MRWatcherError.notConfigured }
+        let host = await MainActor.run { config.gitlabHost }
+
+        let url = try buildURL(host: host, path: "/api/v4/merge_requests", query: [
+            "author_username": username,
+            "state": "merged",
+            "order_by": "updated_at",
+            "sort": "desc",
+            "per_page": "10"
+        ])
+        var request = URLRequest(url: url)
+        request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([MRSummary].self, from: data)
+    }
+
     func fetchApprovals(projectId: Int, mrIid: Int) async throws -> MRApprovals {
         let pat = await MainActor.run { config.gitlabPAT }
         guard let pat else { throw MRWatcherError.notConfigured }

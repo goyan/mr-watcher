@@ -39,7 +39,7 @@ Pour chaque MR ouverte, affiche en temps réel :
 
 ### Surveillance des MRs mergées
 
-Les MRs mergées restent visibles avec le badge `[MERGED]` et un bouton `✕ Retirer` pour les archiver manuellement.
+Les MRs mergées restent visibles avec l'icône `🔀` et un bouton `✕ Retirer` pour les archiver manuellement.
 
 ## Prérequis
 

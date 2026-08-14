@@ -20,6 +20,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F7 | Âge de la MR (`Xj` / `Xh`) | ✅ done |
 | F8 | Badge DRAFT | ✅ done |
 | F9 | Label projet multi-repo (`[millenium]` / `[terragrunt]` / etc.) | ✅ done |
+| F10 | État mergé affiché par l'icône `🔀`, distincte des labels entre crochets | ✅ done |
+| F11 | MRs mergées conservées après redémarrage, jusqu'à `Retirer` | ✅ done |
+| F12 | 10 dernières MRs mergées chargées depuis GitLab au démarrage | ✅ done |
 
 ### Actions
 
@@ -60,6 +63,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 |---|---------|----------|
 | B1 | ~~Feedback visuel après `/rebase` (succès / erreur)~~ | ✅ done |
 | J1 | Statut Jira par MR via `acli` shell-out | ✅ done |
+| J2 | Statut Jira conservé et rafraîchi pour les MRs mergées | ✅ done |
 | B2 | Ping Slack depuis le menu (COPRO → #copro-daily-run, TRANSACTION → #transac-daily-run) | haute — en attente token Slack |
 | B3 | Filtrer/trier les MRs (par urgence : CI❌ > ⬇N > sans review) | moyenne |
 | B4 | Support multi-auteurs (reviewer assigné à moi) | basse |

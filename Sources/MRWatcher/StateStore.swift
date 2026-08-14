@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-struct MRKey: Hashable {
+struct MRKey: Hashable, Codable {
     let projectId: Int
     let iid: Int
 }
@@ -35,6 +35,18 @@ final class StateStore {
 
     private let maxEvents = 50
     private var seenEventKeys: Set<String> = []
+    private static let persistedMergedStateKey = "persistedMergedMRState"
+
+    private struct PersistedMergedState: Codable {
+        let mergedMRs: [MRSummary]
+        let dismissedKeys: [MRKey]
+    }
+
+    init() {
+        let persistedState = Self.loadPersistedMergedState()
+        mrs = persistedState.mergedMRs
+        dismissedKeys = Set(persistedState.dismissedKeys)
+    }
 
     private func eventKey(projectId: Int, iid: Int, kind: WatchEventKind) -> String {
         let kindStr: String = switch kind {
@@ -51,22 +63,31 @@ final class StateStore {
     func dismiss(key: MRKey) {
         dismissedKeys.insert(key)
         mrs.removeAll { MRKey(projectId: $0.projectId, iid: $0.iid) == key }
+        jiraStatuses[key] = nil
+        persistMergedState()
     }
 
-    func update(mrs: [MRSummary], mergedMRs: [MRSummary] = [], approvals: [MRKey: MRApprovals]) {
+    func update(
+        mrs: [MRSummary],
+        mergedMRs: [MRSummary] = [],
+        approvals: [MRKey: MRApprovals],
+        notifyAboutMerges: Bool = true
+    ) {
         var newEvents: [WatchEvent] = []
 
         // Detect merges: MRs that disappeared from the opened list and were confirmed merged
-        for mr in mergedMRs {
-            let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-            guard !dismissedKeys.contains(key) else { continue }
-            let ek = eventKey(projectId: mr.projectId, iid: mr.iid, kind: .merged)
-            guard !seenEventKeys.contains(ek) else { continue }
-            seenEventKeys.insert(ek)
-            newEvents.append(WatchEvent(
-                id: UUID(), kind: .merged,
-                mrTitle: mr.title, webUrl: mr.webUrl, mrIid: mr.iid, createdAt: Date()
-            ))
+        if notifyAboutMerges {
+            for mr in mergedMRs {
+                let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                guard !dismissedKeys.contains(key) else { continue }
+                let ek = eventKey(projectId: mr.projectId, iid: mr.iid, kind: .merged)
+                guard !seenEventKeys.contains(ek) else { continue }
+                seenEventKeys.insert(ek)
+                newEvents.append(WatchEvent(
+                    id: UUID(), kind: .merged,
+                    mrTitle: mr.title, webUrl: mr.webUrl, mrIid: mr.iid, createdAt: Date()
+                ))
+            }
         }
 
         // CI change and comment notifications (only for opened MRs)
@@ -161,11 +182,34 @@ final class StateStore {
         self.mrs = openedFiltered + newMergedFiltered + retainedPreviousMerged
         self.approvals = approvals
         self.events = Array((newEvents + self.events).prefix(maxEvents))
+        persistMergedState()
     }
 
     func clearEvents() {
         events = []
         // seenEventKeys is intentionally NOT cleared: it is a dedup memory,
         // not a display cache. Clearing it would cause re-notifications on the next poll.
+    }
+
+    private func persistMergedState() {
+        let mergedMRs = mrs.filter { $0.state == "merged" }
+        let state = PersistedMergedState(
+            mergedMRs: mergedMRs,
+            dismissedKeys: Array(dismissedKeys)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(state) else { return }
+        UserDefaults.standard.set(data, forKey: Self.persistedMergedStateKey)
+    }
+
+    private static func loadPersistedMergedState() -> PersistedMergedState {
+        guard let data = UserDefaults.standard.data(forKey: persistedMergedStateKey) else {
+            return PersistedMergedState(mergedMRs: [], dismissedKeys: [])
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode(PersistedMergedState.self, from: data))
+            ?? PersistedMergedState(mergedMRs: [], dismissedKeys: [])
     }
 }

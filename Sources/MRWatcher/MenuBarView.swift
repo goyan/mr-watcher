@@ -146,8 +146,8 @@ struct MenuBarView: View {
             parts.append(ticket)
         }
 
-        // Merged
-        if mr.state == "merged" { parts.append("[MERGED]") }
+        // Merged: keep brackets reserved for Jira and project statuses.
+        if mr.state == "merged" { parts.append("🔀") }
 
         // Draft
         if mr.isDraft { parts.append("[DRAFT]") }
@@ -182,7 +182,7 @@ struct MenuBarView: View {
 
         // Statut Jira
         if let jira = store.jiraStatuses[key] {
-            let icon = jira.isStale ? "⚠️PROD" : jiraEmoji(jira.categoryKey)
+            let icon = mr.state == "opened" && jira.isStale ? "⚠️PROD" : jiraEmoji(jira.categoryKey)
             parts.append("[\(icon) \(jira.name)]")
         }
 

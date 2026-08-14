@@ -6,6 +6,7 @@ final class PollingScheduler {
     private let gitlab: GitLabService
     private let jira: JiraService
     private var task: Task<Void, Never>?
+    private var shouldBootstrapRecentlyMergedMRs = true
 
     private var intervalSeconds: Int {
         max(15, UserDefaults.standard.integer(forKey: "pollIntervalSeconds").atLeast(60))
@@ -19,9 +20,25 @@ final class PollingScheduler {
 
     func start() {
         stop()
-        task = Task { [store, gitlab, jira] in
+        task = Task { [weak self, store, gitlab, jira] in
             while !Task.isCancelled {
-                await PollingScheduler.poll(store: store, gitlab: gitlab, jira: jira)
+                let shouldBootstrapRecentlyMergedMRs = await MainActor.run {
+                    self?.shouldBootstrapRecentlyMergedMRs ?? false
+                }
+                let didComplete = await PollingScheduler.poll(
+                    store: store,
+                    gitlab: gitlab,
+                    jira: jira,
+                    shouldBootstrapRecentlyMergedMRs: shouldBootstrapRecentlyMergedMRs
+                )
+                if didComplete {
+                    await MainActor.run {
+                        self?.shouldBootstrapRecentlyMergedMRs = false
+                    }
+                }
+                let intervalSeconds = await MainActor.run {
+                    self?.intervalSeconds ?? 60
+                }
                 try? await Task.sleep(for: .seconds(Double(intervalSeconds)))
             }
         }
@@ -79,24 +96,43 @@ final class PollingScheduler {
 
     func pollNow() async {
         guard !store.isLoading else { return }
-        await PollingScheduler.poll(store: store, gitlab: gitlab, jira: jira)
+        let didComplete = await PollingScheduler.poll(
+            store: store,
+            gitlab: gitlab,
+            jira: jira,
+            shouldBootstrapRecentlyMergedMRs: shouldBootstrapRecentlyMergedMRs
+        )
+        if didComplete {
+            shouldBootstrapRecentlyMergedMRs = false
+        }
     }
 
-    private static func poll(store: StateStore, gitlab: GitLabService, jira: JiraService) async {
+    private static func poll(
+        store: StateStore,
+        gitlab: GitLabService,
+        jira: JiraService,
+        shouldBootstrapRecentlyMergedMRs: Bool
+    ) async -> Bool {
         await MainActor.run { store.isLoading = true; store.lastError = nil; store.lastErrorIsAuth = false }
         do {
             let mrs = try await gitlab.fetchMyOpenMRs()
+            let recentlyMergedMRs = shouldBootstrapRecentlyMergedMRs
+                ? try await gitlab.fetchMyRecentlyMergedMRs()
+                : []
 
             // Snapshot opened keys before this poll so we can detect disappearances
             let previousOpenedKeys = await MainActor.run {
                 Set(store.mrs.filter { $0.state == "opened" }.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
             }
+            let retainedMergedMRs = await MainActor.run {
+                store.mrs.filter { $0.state == "merged" && !store.dismissedKeys.contains(MRKey(projectId: $0.projectId, iid: $0.iid)) }
+            }
 
             var approvals: [MRKey: MRApprovals] = [:]
             var enrichedMRs: [MRSummary] = []
-            var mergedMRs: [MRSummary] = []
+            var mergedMRs: [MRSummary] = recentlyMergedMRs
             for mr in mrs {
-                if Task.isCancelled { return }
+                if Task.isCancelled { return false }
                 let key = MRKey(projectId: mr.projectId, iid: mr.iid)
                 let detailed = (try? await gitlab.fetchMRDetail(projectId: mr.projectId, mrIid: mr.iid)) ?? mr
                 if detailed.state == "merged" {
@@ -113,7 +149,7 @@ final class PollingScheduler {
             let newKeys = Set(mrs.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
             let disappearedKeys = previousOpenedKeys.subtracting(newKeys)
             for key in disappearedKeys {
-                if Task.isCancelled { return }
+                if Task.isCancelled { return false }
                 if let detail = try? await gitlab.fetchMRDetail(projectId: key.projectId, mrIid: key.iid),
                    detail.state == "merged" {
                     mergedMRs.append(detail)
@@ -123,8 +159,14 @@ final class PollingScheduler {
 
             var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
             if jira.isAvailable {
-                for mr in enrichedMRs {
-                    if Task.isCancelled { return }
+                let jiraMRs = Dictionary(
+                    (enrichedMRs + mergedMRs + retainedMergedMRs).map {
+                        (MRKey(projectId: $0.projectId, iid: $0.iid), $0)
+                    },
+                    uniquingKeysWith: { latest, _ in latest }
+                ).values
+                for mr in jiraMRs {
+                    if Task.isCancelled { return false }
                     guard let issueKey = extractProdTicket(from: mr) else { continue }
                     let key = MRKey(projectId: mr.projectId, iid: mr.iid)
                     if let status = try? await jira.fetchIssueStatus(issueKey: issueKey) {
@@ -134,16 +176,23 @@ final class PollingScheduler {
             }
 
             await MainActor.run {
-                store.update(mrs: enrichedMRs, mergedMRs: mergedMRs, approvals: approvals)
+                store.update(
+                    mrs: enrichedMRs,
+                    mergedMRs: mergedMRs,
+                    approvals: approvals,
+                    notifyAboutMerges: !shouldBootstrapRecentlyMergedMRs
+                )
                 store.jiraStatuses = newJiraStatuses
                 store.isLoading = false
             }
+            return true
         } catch {
             await MainActor.run {
                 store.lastError = error.localizedDescription
                 store.lastErrorIsAuth = { if case .unauthorized = error as? MRWatcherError { return true }; return false }()
                 store.isLoading = false
             }
+            return false
         }
     }
 }
