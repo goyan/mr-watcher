@@ -17,6 +17,11 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle")
             ],
             path: "Sources/MRWatcher"
+        ),
+        .testTarget(
+            name: "MRWatcherTests",
+            dependencies: ["MRWatcher"],
+            path: "Tests/MRWatcherTests"
         )
     ]
 )

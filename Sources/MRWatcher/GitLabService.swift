@@ -70,15 +70,79 @@ private struct ApprovalsResponse: Codable {
     struct ApproverUser: Codable { let username: String }
 }
 
+struct SameOriginRedirectPolicy {
+    private struct Origin: Equatable {
+        let scheme: String
+        let host: String
+        let port: Int?
+    }
+
+    static func permitsRedirect(from originalURL: URL?, to redirectURL: URL?) -> Bool {
+        guard let originalURL,
+              let redirectURL,
+              let originalOrigin = origin(for: originalURL),
+              let redirectOrigin = origin(for: redirectURL) else {
+            return false
+        }
+        return originalOrigin == redirectOrigin
+    }
+
+    private static func origin(for url: URL) -> Origin? {
+        guard let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased(),
+              !scheme.isEmpty,
+              !host.isEmpty else {
+            return nil
+        }
+
+        let normalizedHost = host.hasSuffix(".") ? String(host.dropLast()) : host
+        let effectivePort = url.port ?? defaultPort(for: scheme)
+        return Origin(scheme: scheme, host: normalizedHost, port: effectivePort)
+    }
+
+    private static func defaultPort(for scheme: String) -> Int? {
+        switch scheme {
+        case "http": return 80
+        case "https": return 443
+        default: return nil
+        }
+    }
+}
+
+private final class SameOriginRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard SameOriginRedirectPolicy.permitsRedirect(
+            from: task.originalRequest?.url,
+            to: request.url
+        ) else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
+    }
+}
+
 final class GitLabService {
     private let config: ConfigManager
+    private let redirectDelegate: SameOriginRedirectDelegate
     private let session: URLSession
 
     init(config: ConfigManager) {
         self.config = config
+        self.redirectDelegate = SameOriginRedirectDelegate()
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 15
-        self.session = URLSession(configuration: cfg)
+        self.session = URLSession(
+            configuration: cfg,
+            delegate: redirectDelegate,
+            delegateQueue: nil
+        )
     }
 
     func fetchMyOpenMRs() async throws -> [MRSummary] {

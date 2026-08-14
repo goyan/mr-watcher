@@ -55,16 +55,18 @@
 |------|----------|
 | Sparkle 2.9 intégré via SwiftPM | ✅ |
 | Commande `Rechercher les mises à jour...` avec UI native Sparkle | ✅ |
-| Bundle `MRWatcher.app` avec `Sparkle.framework`, appcast et signature ad-hoc | ✅ |
-| Helper `scripts/release.sh <version>` : ZIP signé, DMG manuel, appcast | ✅ publié en v0.5.0, test v0.5.1 |
+| Bundle `MRWatcher.app` avec `Sparkle.framework`, feed signé et vérification avant extraction | ✅ |
+| Helper `scripts/release.sh <version>` : build SwiftPM propre, ZIP/feed signés et vérifiés, DMG manuel | ✅ publié en v0.5.0, test v0.5.1 |
+| Sauvegarde EdDSA chiffrée AES-256 | ✅ script opt-in, support hors ligne privé requis |
+| Sécurité runtime | ✅ PAT bloqué sur redirection inter-origine, `.env` régulier propriétaire en 0600 |
 | Version installée dans le pied de la fenêtre principale | ✅ |
 
 ### Limites connues
 
 | Sujet | Détail |
 |-------|--------|
-| Gatekeeper | Sans compte Apple Developer, la première installation non notarisée peut nécessiter clic droit → Ouvrir. |
-| Clé EdDSA | La clé privée reste dans le trousseau de connexion sous `com.goyan.mrwatcher.updates`; sa perte empêche de signer les releases suivantes. |
+| DMG manuel | Sans Developer ID ni notarisation, le DMG n'authentifie pas l'éditeur. Le ZIP Sparkle signé est le canal de mise à jour recommandé après l'installation initiale. |
+| Clé EdDSA | La clé privée reste dans le trousseau de connexion sous `com.goyan.mrwatcher.updates`; la sauvegarde chiffrée hors ligne doit être conservée séparément. |
 
 ---
 
@@ -79,4 +81,4 @@
 7. Tri MRs par urgence (CI❌ en premier)
 8. ~~Push github.com/goyan/mr-watcher~~ ✅
 9. ~~Publier une première release Sparkle signée (`appcast.xml` + ZIP + DMG)~~ ✅ v0.5.0
-10. Tester la mise à jour Sparkle de v0.5.0 vers v0.5.1
+10. ~~Tester la mise à jour Sparkle de v0.5.0 vers v0.5.1~~ ✅

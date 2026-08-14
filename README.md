@@ -64,10 +64,11 @@ Configurer le PAT GitLab via **⚙️ Configurer…** dans le menu de l'app.
 
 ## Releases et mises à jour
 
-Les mises à jour en application utilisent Sparkle et une signature EdDSA stockée dans le trousseau
-de connexion macOS, sous le compte `com.goyan.mrwatcher.updates`. Ne supprimez pas cette clé :
-elle est nécessaire pour signer les releases futures, mais ne doit jamais être exportée ou ajoutée
-au dépôt.
+Les mises à jour en application utilisent Sparkle 2.9, avec une signature EdDSA du ZIP et du
+feed `appcast.xml`. Le bundle exige un feed signé et Sparkle vérifie l'archive avant extraction.
+La clé privée est stockée dans le trousseau de connexion macOS sous le compte
+`com.goyan.mrwatcher.updates`. Ne la supprimez pas, ne la mettez jamais dans le dépôt et ne la
+partagez jamais.
 
 Pour préparer une release :
 
@@ -75,15 +76,48 @@ Pour préparer une release :
 bash scripts/release.sh 0.5.0
 ```
 
-Le script produit `dist/MRWatcher-v0.5.0.zip` pour Sparkle et
-`dist/MRWatcher-v0.5.0.dmg` pour l'installation manuelle, puis remplace `appcast.xml` par
-l'entrée de la release et met `VERSION` à jour. Publiez d'abord les deux archives dans la release
-GitHub `v0.5.0`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP disponible.
-Le ZIP doit rester inchangé après signature.
+Le script refuse un worktree/index non propre ou un tag local/distant `v0.5.0` déjà existant, puis
+reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.0.zip` pour Sparkle et
+`dist/MRWatcher-v0.5.0.dmg` pour l'installation manuelle, met `VERSION` à jour, signe
+`appcast.xml` et vérifie cette signature. Un préflight sans écriture est disponible avec
+`MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh 0.5.0`. Publiez d'abord les deux archives
+dans la release GitHub `v0.5.0`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
+disponible. Le ZIP et le feed doivent rester inchangés après signature.
 
-Un abonnement Apple Developer n'est pas nécessaire pour la signature EdDSA Sparkle. En revanche,
-l'absence de signature Developer ID et de notarisation laisse Gatekeeper demander une autorisation
-lors de la première installation.
+Le ZIP Sparkle signé est le canal de mise à jour recommandé. Sans certificat Developer ID ni
+notarisation, le DMG public reste un installeur manuel sans authentification de l'éditeur : une
+substitution avant la première installation ne peut pas être détectée de manière fiable. Gatekeeper
+peut aussi demander une autorisation au premier lancement.
+
+### Sauvegarde de la clé EdDSA
+
+Conservez une sauvegarde chiffrée hors ligne de la clé de signature, dans un répertoire privé
+(`chmod 700`) sur un support chiffré :
+
+```bash
+bash scripts/backup-update-key.sh /Volumes/Offline/mrwatcher-2026-08-14.mrwatcher-update-key.enc
+```
+
+Le script lit uniquement le compte Keychain `com.goyan.mrwatcher.updates`, demande une passphrase,
+crée un fichier AES-256 chiffré avec PBKDF2 et ne l'écrase jamais. Il ne doit pas être exécuté dans
+le dépôt ou vers un stockage synchronisé. Conservez séparément la passphrase et le support.
+
+Pour restaurer sur un Mac de récupération, déchiffrez temporairement le fichier dans un répertoire
+privé, importez-le avec l'outil Sparkle 2.9 et supprimez immédiatement le fichier temporaire :
+
+```bash
+umask 077
+temporary_key="$(mktemp)"
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 \
+  -in /Volumes/Offline/mrwatcher-2026-08-14.mrwatcher-update-key.enc \
+  -out "$temporary_key"
+.build/artifacts/sparkle/Sparkle/bin/generate_keys \
+  --account com.goyan.mrwatcher.updates -f "$temporary_key"
+rm -f "$temporary_key"
+```
+
+Effectuez cette opération sur une machine de récupération contrôlée. Le fichier temporaire est une
+clé privée en clair ; le chiffrement de disque doit être actif.
 
 ## Configuration
 

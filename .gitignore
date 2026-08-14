@@ -1,4 +1,5 @@
 .build/
 dist/
+*.mrwatcher-update-key.enc
 *.o
 *.d

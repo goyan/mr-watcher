@@ -43,15 +43,16 @@ struct SetupView: View {
         let fm = FileManager.default
         let envURL = fm.homeDirectoryForCurrentUser.appendingPathComponent(".env")
         let envPath = envURL.path
-        // Bug 4: resolve symlink so atomic write targets the real inode
-        let url = envURL.resolvingSymlinksInPath()
 
         do {
             // Bug 1: distinguish "file absent" from "read failure" — abort on failure
             var content = ""
             if fm.fileExists(atPath: envPath) {
-                do { content = try String(contentsOf: url, encoding: .utf8) }
-                catch { errorMsg = "Lecture de ~/.env impossible : \(error.localizedDescription)"; return }
+                guard let secureContents = SecureDotEnvFile.readContents(at: envURL) else {
+                    errorMsg = "~/.env doit appartenir à l'utilisateur et être en 0600"
+                    return
+                }
+                content = secureContents
             }
             let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
                 .filter { line in
@@ -65,12 +66,7 @@ struct SetupView: View {
             content = lines.joined(separator: "\n")
             if !content.hasSuffix("\n") && !content.isEmpty { content += "\n" }
             content += "GITLAB_PAT=\(pat)\nGITLAB_HOST=\(h)\nGITLAB_USERNAME=\(username)\n"
-            // Bug 2: create file with 0600 before write so the new inode never has 0644
-            if !fm.fileExists(atPath: envPath) {
-                fm.createFile(atPath: envPath, contents: nil, attributes: [.posixPermissions: 0o600])
-            }
-            try content.write(to: url, atomically: true, encoding: .utf8)
-            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: envPath)
+            try SecureDotEnvFile.replaceContents(content, at: envURL)
             errorMsg = nil
             saved = true
             ConfigManager.shared.reload()

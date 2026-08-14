@@ -1,31 +1,70 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
 
-VERSION_FILE="$PWD/VERSION"
+REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+cd "$REPO_ROOT"
+
+VERSION_FILE="$REPO_ROOT/VERSION"
 DEFAULT_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || true)"
 DEFAULT_VERSION="${DEFAULT_VERSION:-0.0.0}"
 MRWATCHER_VERSION="${MRWATCHER_VERSION:-$DEFAULT_VERSION}"
 APP_BUNDLE="${MRWATCHER_APP_BUNDLE:-/Applications/MRWatcher.app}"
 KILL_RUNNING_APP="${MRWATCHER_KILL_RUNNING_APP:-1}"
+DIST_APP_BUNDLE="$REPO_ROOT/dist/MRWatcher.app"
+SPARKLE_ARTIFACT_ROOT="$REPO_ROOT/.build/artifacts/sparkle/Sparkle"
+SPARKLE_FRAMEWORK_SOURCE="$SPARKLE_ARTIFACT_ROOT/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+SPARKLE_FRAMEWORK_INFO="$SPARKLE_FRAMEWORK_SOURCE/Versions/B/Resources/Info.plist"
+
+fail() {
+  echo "$*" >&2
+  exit 1
+}
+
+assert_no_symlink_components() {
+  local path="$1"
+  local current=""
+  local component
+  local parts=()
+
+  IFS='/' read -r -a parts <<< "$path"
+  for component in "${parts[@]}"; do
+    [[ -z "$component" ]] && continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "Chemin refusé : composant symbolique détecté ($current)."
+  done
+}
+
+validate_app_bundle() {
+  [[ "$APP_BUNDLE" == /* ]] || fail "MRWATCHER_APP_BUNDLE doit être un chemin absolu autorisé."
+  case "$APP_BUNDLE" in
+    /Applications/MRWatcher.app|"$DIST_APP_BUNDLE") ;;
+    *) fail "MRWATCHER_APP_BUNDLE doit être /Applications/MRWatcher.app ou $DIST_APP_BUNDLE." ;;
+  esac
+  assert_no_symlink_components "$APP_BUNDLE"
+}
+
+validate_sparkle_framework() {
+  [[ -d "$SPARKLE_FRAMEWORK_SOURCE" ]] || fail "L'artefact Sparkle 2.9 est introuvable : $SPARKLE_FRAMEWORK_SOURCE"
+  [[ -f "$SPARKLE_FRAMEWORK_INFO" ]] || fail "Info.plist Sparkle introuvable : $SPARKLE_FRAMEWORK_INFO"
+
+  local sparkle_version
+  sparkle_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SPARKLE_FRAMEWORK_INFO")"
+  [[ "$sparkle_version" == 2.9.* ]] || fail "Version Sparkle inattendue : $sparkle_version (2.9.x requise)."
+}
 
 if [[ ! "$MRWATCHER_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   echo "MRWATCHER_VERSION doit être une version numérique MAJEUR.MINEUR.CORRECTIF." >&2
   exit 64
 fi
 
+validate_app_bundle
 swift build -c release
+validate_sparkle_framework
 
 APP_DIR="$APP_BUNDLE/Contents/MacOS"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
 FRAMEWORKS_DIR="$APP_BUNDLE/Contents/Frameworks"
 ICON_SOURCE="Assets/AppIcon.png"
-SPARKLE_FRAMEWORK_SOURCE="$(find .build -type d -name Sparkle.framework -print -quit)"
-
-if [[ -z "$SPARKLE_FRAMEWORK_SOURCE" ]]; then
-  echo "Sparkle.framework introuvable après le build." >&2
-  exit 1
-fi
 
 # Quitter l'app si elle tourne avant d'écraser le binaire
 if [[ "$KILL_RUNNING_APP" == "1" ]]; then
@@ -68,7 +107,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>SUFeedURL</key><string>https://raw.githubusercontent.com/goyan/mr-watcher/main/appcast.xml</string>
   <key>SUPublicEDKey</key><string>WVZl0Cunt1pb4SuDL0WFNiFaYLTcU7M5rwYJA547rGA=</string>
-  <key>SUAutomaticallyCheckForUpdates</key><false/>
+  <key>SURequireSignedFeed</key><true/>
+  <key>SUVerifyUpdateBeforeExtraction</key><true/>
+  <key>SUEnableAutomaticChecks</key><false/>
 </dict></plist>
 PLIST
 

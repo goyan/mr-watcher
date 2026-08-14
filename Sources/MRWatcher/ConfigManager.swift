@@ -1,5 +1,66 @@
 import Foundation
 import Security
+import Darwin
+
+enum SecureDotEnvFile {
+    static func readContents(at url: URL) -> String? {
+        let descriptor = url.path.withCString {
+            open($0, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+        }
+        guard descriptor >= 0 else { return nil }
+        defer { close(descriptor) }
+
+        var fileInfo = stat()
+        guard fstat(descriptor, &fileInfo) == 0,
+              (fileInfo.st_mode & S_IFMT) == S_IFREG,
+              fileInfo.st_uid == getuid(),
+              (fileInfo.st_mode & 0o077) == 0 else {
+            return nil
+        }
+
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+        guard let data = try? handle.readToEnd(),
+              let contents = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return contents
+    }
+
+    static func replaceContents(_ contents: String, at url: URL) throws {
+        let temporaryURL = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+        let descriptor = temporaryURL.path.withCString {
+            open($0, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, S_IRUSR | S_IWUSR)
+        }
+        guard descriptor >= 0 else { throw posixError() }
+
+        var shouldRemoveTemporaryFile = true
+        defer {
+            close(descriptor)
+            if shouldRemoveTemporaryFile {
+                _ = temporaryURL.path.withCString { unlink($0) }
+            }
+        }
+
+        guard fchmod(descriptor, S_IRUSR | S_IWUSR) == 0 else { throw posixError() }
+
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+        handle.write(Data(contents.utf8))
+        try handle.synchronize()
+
+        let renameResult = temporaryURL.path.withCString { temporaryPath in
+            url.path.withCString { destinationPath in
+                rename(temporaryPath, destinationPath)
+            }
+        }
+        guard renameResult == 0 else { throw posixError() }
+        shouldRemoveTemporaryFile = false
+    }
+
+    private static func posixError() -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+}
 
 @MainActor
 final class ConfigManager {
@@ -38,7 +99,7 @@ final class ConfigManager {
 
     private func loadDotEnv() -> [String: String] {
         let envURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".env")
-        guard let contents = try? String(contentsOf: envURL, encoding: .utf8) else { return [:] }
+        guard let contents = SecureDotEnvFile.readContents(at: envURL) else { return [:] }
         return parseEnvContents(contents)
     }
 

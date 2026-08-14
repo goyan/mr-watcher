@@ -56,8 +56,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | I6 | `setup.sh` interactif (PAT masqué, chmod 600) | ✅ done |
 | I7 | Icône d'application incluse dans le bundle macOS | ✅ done |
 | I8 | Application visible dans le Dock tout en conservant le menu bar extra | ✅ done |
-| I9 | Mise à jour manuelle Sparkle : appcast EdDSA, téléchargement et installation native | ✅ done |
+| I9 | Mise à jour manuelle Sparkle : ZIP et appcast EdDSA signés, vérifiés avant extraction | ✅ done |
 | I10 | Version installée affichée dans le pied de la fenêtre principale | ✅ done |
+| I11 | Sécurité runtime : PAT sans redirection inter-origine et `.env` privé vérifié | ✅ done |
 
 ---
 
