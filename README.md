@@ -1,6 +1,6 @@
 # MR Watcher
 
-macOS menu bar app pour surveiller ses MRs GitLab en un coup d'œil.
+macOS menu bar app pour surveiller ses MRs GitLab en un coup d'œil, accessible aussi depuis le Dock.
 
 ## Ce que ça fait
 

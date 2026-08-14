@@ -54,6 +54,8 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | I4 | `@MainActor` isolation (pas de data race) | ✅ done |
 | I5 | `install.sh` + codesign ad-hoc | ✅ done |
 | I6 | `setup.sh` interactif (PAT masqué, chmod 600) | ✅ done |
+| I7 | Icône d'application incluse dans le bundle macOS | ✅ done |
+| I8 | Application visible dans le Dock tout en conservant le menu bar extra | ✅ done |
 
 ---
 

@@ -1,9 +1,17 @@
 import SwiftUI
+import AppKit
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+    }
+}
 
 @main
 struct MRWatcherApp: App {
     @State private var store: StateStore
     @State private var seenEventIds: Set<UUID> = []
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     private let scheduler: PollingScheduler
     private let setupController = SetupWindowController()
@@ -26,6 +34,14 @@ struct MRWatcherApp: App {
     }
 
     var body: some Scene {
+        WindowGroup {
+            StatusView(
+                store: store,
+                scheduler: scheduler,
+                setupController: setupController
+            )
+        }
+
         MenuBarExtra {
             MenuBarView(store: store, scheduler: scheduler, setupController: setupController) {
                 seenEventIds.formUnion(store.events.map(\.id))

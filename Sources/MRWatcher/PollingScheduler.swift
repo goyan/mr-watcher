@@ -46,6 +46,10 @@ final class PollingScheduler {
 
     func stop() { task?.cancel(); task = nil }
 
+    func restart() {
+        start()
+    }
+
     func rebase(projectId: Int, mrIid: Int) async throws {
         try await gitlab.rebase(projectId: projectId, mrIid: mrIid)
     }
@@ -184,6 +188,7 @@ final class PollingScheduler {
                 )
                 store.jiraStatuses = newJiraStatuses
                 store.isLoading = false
+                store.lastSuccessfulPollAt = Date()
             }
             return true
         } catch {
