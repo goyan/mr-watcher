@@ -2,7 +2,7 @@
 
 ## État actuel
 
-- **Version** : 0.5.0
+- **Version** : 0.5.1 (release de test Sparkle)
 - **Build** : ✅ `swift build -c release`, bundle Sparkle et archives signées publiés
 - **Installé** : `/Applications/MRWatcher.app` (codesign ad-hoc)
 - **PAT** : configuré dans `~/.env` (token glab Millenium)
@@ -56,7 +56,7 @@
 | Sparkle 2.9 intégré via SwiftPM | ✅ |
 | Commande `Rechercher les mises à jour...` avec UI native Sparkle | ✅ |
 | Bundle `MRWatcher.app` avec `Sparkle.framework`, appcast et signature ad-hoc | ✅ |
-| Helper `scripts/release.sh <version>` : ZIP signé, DMG manuel, appcast | ✅ publié en v0.5.0 |
+| Helper `scripts/release.sh <version>` : ZIP signé, DMG manuel, appcast | ✅ publié en v0.5.0, test v0.5.1 |
 | Version installée dans le pied de la fenêtre principale | ✅ |
 
 ### Limites connues
@@ -79,3 +79,4 @@
 7. Tri MRs par urgence (CI❌ en premier)
 8. ~~Push github.com/goyan/mr-watcher~~ ✅
 9. ~~Publier une première release Sparkle signée (`appcast.xml` + ZIP + DMG)~~ ✅ v0.5.0
+10. Tester la mise à jour Sparkle de v0.5.0 vers v0.5.1
