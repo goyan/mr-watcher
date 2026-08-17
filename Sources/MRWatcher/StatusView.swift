@@ -252,37 +252,41 @@ struct StatusView: View {
 
     private func mrRow(_ mr: MRSummary) -> some View {
         let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        return HStack(alignment: .top, spacing: 8) {
-            Button {
-                openURL(mr.webUrl)
-            } label: {
-                VStack(alignment: .leading, spacing: 5) {
-                    metadata(for: mr)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 8) {
+                Button {
+                    openURL(mr.webUrl)
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        metadata(for: mr)
 
-                    Text(mr.title)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        Text(mr.title)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+                .buttonStyle(.plain)
 
-            trailingActions(for: mr)
-                .frame(width: 250, alignment: .trailing)
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 3)
-        .background {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(hoveredMR == key ? Color.secondary.opacity(0.10) : .clear)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 4))
-        .onHover { isHovering in
-            hoveredMR = isHovering ? key : nil
-            isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
+                trailingActions(for: mr)
+                    .frame(width: 250, alignment: .trailing)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+            .background {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(hoveredMR == key ? Color.secondary.opacity(0.10) : .clear)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 4))
+            .onHover { isHovering in
+                hoveredMR = isHovering ? key : nil
+                isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
+            }
+
+            dateRow(for: mr)
         }
     }
 
@@ -372,13 +376,7 @@ struct StatusView: View {
 
     @ViewBuilder
     private func stateMetadata(for mr: MRSummary) -> some View {
-        if mr.state == "merged" {
-            if let mergedAt = mr.mergedAt {
-                Text("Mergée: \(ageString(mergedAt))")
-                    .foregroundStyle(.secondary)
-                    .help(formatDate(mergedAt))
-            }
-        } else {
+        if mr.state != "merged" {
             if mr.isDraft {
                 Text("DRAFT")
                     .foregroundStyle(.secondary)
@@ -398,10 +396,25 @@ struct StatusView: View {
 
             approvalMetadata(for: mr)
         }
+    }
 
-        Text("Créée: \(ageString(mr.createdAt))")
-            .foregroundStyle(.secondary)
-            .help(formatDate(mr.createdAt))
+    @ViewBuilder
+    private func dateRow(for mr: MRSummary) -> some View {
+        HStack(spacing: 8) {
+            if let mergedAt = mr.mergedAt {
+                Text("Mergée: \(ageString(mergedAt))")
+                    .foregroundStyle(.secondary)
+            }
+            Text("Créée: \(ageString(mr.createdAt))")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .padding(.vertical, 2)
+        .font(.system(.callout, design: .monospaced))
+        .lineLimit(1)
+        .padding(.horizontal, 4)
+        .help(formatDate(mr.createdAt))
     }
 
     private static let dateFormatterCurrentYear: DateFormatter = {
