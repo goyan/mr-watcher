@@ -71,60 +71,80 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var mrsSection: some View {
-        let openedCount = store.mrs.filter { $0.state == "opened" }.count
-        Text("MRs ouvertes (\(openedCount))").font(.caption).foregroundStyle(.secondary)
-        ForEach(Array(store.mrs.enumerated()), id: \.element.id) { idx, mr in
-            if idx > 0 { Divider() }
-            // Ligne 1 : cliquable — IID · PROD · CI · approvals · âge
-            Button(action: { openURL(mr.webUrl) }) {
-                Text(headerLine(mr))
-                    .font(.system(size: 12, design: .monospaced))
+        let opened = store.mrs.filter { $0.state == "opened" }.sorted { $0.createdAt > $1.createdAt }
+        let merged = store.mrs.filter { $0.state == "merged" }.sorted { $0.createdAt > $1.createdAt }
+
+        if !opened.isEmpty {
+            Text("Ouvertes (\(opened.count))").font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(opened.enumerated()), id: \.element.id) { idx, mr in
+                if idx > 0 { Divider() }
+                mrRow(mr)
             }
-            // Ligne 2 : titre (non cliquable, visuel uniquement)
-            Text("  " + truncated(mr.title, 52))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            // Bouton "Retirer" — uniquement pour les MRs mergées
-            if mr.state == "merged" {
-                Button("  ✕ Retirer") {
-                    store.dismiss(key: MRKey(projectId: mr.projectId, iid: mr.iid))
-                }
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+        }
+
+        if !merged.isEmpty {
+            if !opened.isEmpty { Divider() }
+            Text("Récemment mergées (\(merged.count))").font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(merged.enumerated()), id: \.element.id) { idx, mr in
+                if idx > 0 { Divider() }
+                mrRow(mr)
             }
-            // Bouton rebase — visible uniquement si la branche est en retard et non mergée
-            if mr.state != "merged", let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
-                Button("  ↩ /rebase (\(behind) commits)") {
-                    let alert = NSAlert()
-                    alert.messageText = "Lancer le rebase ?"
-                    alert.informativeText = "Rebase de !\(mr.iid) — réécrit l'historique et force-push la branche source."
-                    alert.addButton(withTitle: "Rebase")
-                    alert.addButton(withTitle: "Annuler")
-                    alert.alertStyle = .warning
-                    alert.buttons.last?.keyEquivalent = "\u{1b}"
-                    NSApp.activate(ignoringOtherApps: true)
-                    guard alert.runModal() == .alertFirstButtonReturn else { return }
-                    Task {
-                        do {
-                            // Capturer l'id du pipeline AVANT le rebase
-                            let oldPipelineId = mr.headPipeline?.id
-                            try await scheduler.rebase(projectId: mr.projectId, mrIid: mr.iid)
-                            try? await Task.sleep(for: .seconds(5))
-                            await scheduler.pollNow()
-                            // Tenter de déclencher build affected sur le nouveau pipeline
-                            await scheduler.triggerBuildAffected(projectId: mr.projectId, mrIid: mr.iid, oldPipelineId: oldPipelineId)
-                        } catch {
-                            store.lastError = "Rebase !\(mr.iid) : \(error.localizedDescription)"
-                            NotificationService.shared.notify(
-                                identifier: "rebase-\(mr.projectId)-\(mr.iid)",
-                                title: "Rebase échoué — !\(mr.iid)",
-                                body: error.localizedDescription,
-                                url: mr.webUrl
-                            )
-                        }
+        }
+    }
+
+    @ViewBuilder
+    private func mrRow(_ mr: MRSummary) -> some View {
+        // Ligne 1 : cliquable — IID · PROD · CI · approvals · âge
+        Button(action: { openURL(mr.webUrl) }) {
+            Text(headerLine(mr))
+                .font(.system(size: 11, design: .monospaced))
+        }
+        // Ligne 2 : titre (non cliquable, visuel uniquement)
+        Text("  " + truncated(mr.title, 52))
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+        // Bouton "Retirer" — uniquement pour les MRs mergées
+        if mr.state == "merged" {
+            Button("  ✕ Retirer") {
+                store.dismiss(key: MRKey(projectId: mr.projectId, iid: mr.iid))
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+        }
+        // Bouton rebase — visible uniquement si la branche est en retard et non mergée
+        if let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
+            Button("  ↩ /rebase (\(behind) commits)") {
+                let alert = NSAlert()
+                alert.messageText = "Lancer le rebase ?"
+                alert.informativeText = "Rebase de !\(mr.iid) — réécrit l'historique et force-push la branche source."
+                alert.addButton(withTitle: "Rebase")
+                alert.addButton(withTitle: "Annuler")
+                alert.alertStyle = .warning
+                alert.buttons.last?.keyEquivalent = "\u{1b}"
+                NSApp.activate(ignoringOtherApps: true)
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                Task {
+                    do {
+                        // Capturer l'id du pipeline AVANT le rebase
+                        let oldPipelineId = mr.headPipeline?.id
+                        try await scheduler.rebase(projectId: mr.projectId, mrIid: mr.iid)
+                        try? await Task.sleep(for: .seconds(5))
+                        await scheduler.pollNow()
+                        // Tenter de déclencher build affected sur le nouveau pipeline
+                        await scheduler.triggerBuildAffected(projectId: mr.projectId, mrIid: mr.iid, oldPipelineId: oldPipelineId)
+                    } catch {
+                        store.lastError = "Rebase !\(mr.iid) : \(error.localizedDescription)"
+                        NotificationService.shared.notify(
+                            identifier: "rebase-\(mr.projectId)-\(mr.iid)",
+                            title: "Rebase échoué — !\(mr.iid)",
+                            body: error.localizedDescription,
+                            url: mr.webUrl
+                        )
                     }
                 }
             }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
         }
     }
 
