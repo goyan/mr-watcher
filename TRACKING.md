@@ -110,3 +110,13 @@
 | Tooltip quasi-instantané : `NSInitialToolTipDelay = 0.1` dans App.init | ✅ |
 
 | v0.5.7 — revert NSInitialToolTipDelay (cassait les tooltips) | ✅ |
+
+## Session 2026-08-17 (v0.5.8)
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| Tooltip date instantané : remplacement `.help()` par `.onHover` overlay custom (`DateLabelView`) | ✅ |
+| Zone de hover séparée par date (Créée / Mergée), overlay positionné au-dessus du texte | ✅ |
+| App.swift : purge `UserDefaults NSInitialToolTipDelay` au lancement (nettoyage v0.5.6) | ✅ |

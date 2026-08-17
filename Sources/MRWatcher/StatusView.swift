@@ -400,21 +400,12 @@ struct StatusView: View {
 
     @ViewBuilder
     private func dateRow(for mr: MRSummary) -> some View {
-        HStack(spacing: 8) {
-            if let mergedAt = mr.mergedAt {
-                Text("Mergée: \(ageString(mergedAt))")
-                    .foregroundStyle(.secondary)
-            }
-            Text("Créée: \(ageString(mr.createdAt))")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .padding(.vertical, 2)
-        .font(.system(.callout, design: .monospaced))
-        .lineLimit(1)
-        .padding(.horizontal, 4)
-        .help(formatDate(mr.createdAt))
+        DateRowView(
+            createdLabel: "Créée: \(ageString(mr.createdAt))",
+            createdTooltip: formatDate(mr.createdAt),
+            mergedLabel: mr.state == "merged" ? mr.mergedAt.map { "Mergée: \(ageString($0))" } : nil,
+            mergedTooltip: mr.state == "merged" ? mr.mergedAt.map { formatDate($0) } : nil
+        )
     }
 
     private static let dateFormatterCurrentYear: DateFormatter = {
@@ -591,5 +582,53 @@ struct StatusView: View {
                 )
             }
         }
+    }
+}
+
+private struct DateLabelView: View {
+    let label: String
+    let tooltip: String
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Text(label)
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+            .overlay(alignment: .top) {
+                if isHovered {
+                    Text(tooltip)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+                        .shadow(radius: 2)
+                        .offset(y: -28)
+                        .allowsHitTesting(false)
+                        .fixedSize()
+                }
+            }
+    }
+}
+
+private struct DateRowView: View {
+    let createdLabel: String
+    let createdTooltip: String
+    let mergedLabel: String?
+    let mergedTooltip: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let mergedLabel, let mergedTooltip {
+                DateLabelView(label: mergedLabel, tooltip: mergedTooltip)
+            }
+            DateLabelView(label: createdLabel, tooltip: createdTooltip)
+        }
+        .font(.system(.callout, design: .monospaced))
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
     }
 }
