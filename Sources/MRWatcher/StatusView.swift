@@ -219,9 +219,26 @@ struct StatusView: View {
 
             Spacer()
 
-            Text(appVersion)
+            if updaterController.updateAvailable {
+                Button {
+                    updaterController.checkForUpdates()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(appVersion)
+                            .foregroundStyle(.secondary)
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+                .buttonStyle(.plain)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .help("Mise à jour disponible — cliquer pour installer")
+            } else {
+                Text(appVersion)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Text("·")
                 .foregroundStyle(.tertiary)
             Text("Actualisation : \(intervalDescription(pollIntervalSeconds))")
