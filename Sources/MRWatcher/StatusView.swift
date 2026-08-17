@@ -272,10 +272,11 @@ struct StatusView: View {
 
     @ViewBuilder
     private func trailingActions(for mr: MRSummary) -> some View {
+        let ticketKey = ticket(for: mr)
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Group {
                 if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
-                    jiraMetadata(jira, isOpen: mr.state == "opened")
+                    jiraMetadata(jira, isOpen: mr.state == "opened", ticket: ticketKey)
                 }
             }
             .frame(width: 132, alignment: .leading)
@@ -339,7 +340,12 @@ struct StatusView: View {
             Text("[\(projectName(for: mr))]")
 
             if let ticket = ticket(for: mr) {
-                Text(ticket)
+                Button {
+                    openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
+                } label: {
+                    Text(ticket)
+                }
+                .buttonStyle(.plain)
             }
 
             stateMetadata(for: mr)
@@ -422,9 +428,21 @@ struct StatusView: View {
         }
     }
 
-    private func jiraMetadata(_ jira: JiraIssueStatus, isOpen: Bool) -> some View {
-        Label(jira.name, systemImage: jiraSymbol(jira, isOpen: isOpen))
-            .foregroundStyle(jiraColor(jira, isOpen: isOpen))
+    @ViewBuilder
+    private func jiraMetadata(_ jira: JiraIssueStatus, isOpen: Bool, ticket: String?) -> some View {
+        if let ticket {
+            Button {
+                openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
+            } label: {
+                Label(jira.name, systemImage: jiraSymbol(jira, isOpen: isOpen))
+                    .foregroundStyle(jiraColor(jira, isOpen: isOpen))
+            }
+            .buttonStyle(.plain)
+            .help("Ouvrir \(ticket) dans Jira")
+        } else {
+            Label(jira.name, systemImage: jiraSymbol(jira, isOpen: isOpen))
+                .foregroundStyle(jiraColor(jira, isOpen: isOpen))
+        }
     }
 
     private func projectName(for mr: MRSummary) -> String {
