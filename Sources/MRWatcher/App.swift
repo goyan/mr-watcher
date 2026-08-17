@@ -18,7 +18,6 @@ struct MRWatcherApp: App {
     private let updaterController = UpdaterController()
 
     init() {
-        UserDefaults.standard.set(0.1, forKey: "NSInitialToolTipDelay")
         let s = StateStore()
         let svc = GitLabService(config: .shared)
         let jira = JiraService(config: .shared)

@@ -108,3 +108,5 @@
 |------|----------|
 | Fix tooltip dateRow : dates extraites hors du Button dans `dateRow(for:)` avec `.frame(maxWidth:.infinity)` + `.contentShape(Rectangle())` | ✅ |
 | Tooltip quasi-instantané : `NSInitialToolTipDelay = 0.1` dans App.init | ✅ |
+
+| v0.5.7 — revert NSInitialToolTipDelay (cassait les tooltips) | ✅ |
