@@ -27,6 +27,7 @@ struct MRSummary: Identifiable, Codable {
     let sourceBranch: String
     let isDraft: Bool
     let createdAt: Date
+    let mergedAt: Date?
     let headPipeline: EmbeddedPipeline?
     let divergedCommitsCount: Int?
     let hasConflicts: Bool
@@ -40,6 +41,7 @@ struct MRSummary: Identifiable, Codable {
         case sourceBranch = "source_branch"
         case isDraft = "draft"
         case createdAt = "created_at"
+        case mergedAt = "merged_at"
         case headPipeline = "head_pipeline"
         case divergedCommitsCount = "diverged_commits_count"
         case hasConflicts = "has_conflicts"

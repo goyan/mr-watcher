@@ -7,11 +7,19 @@
 Tout changement de code Swift (fichiers `*.swift`) doit être délégué à un agent `coder`.
 Même pour 1 ligne. Pas d'exception.
 
+**Seuil de délégation :**
+- **≤ 2 agents simultanés** → lancer sans demander (`run_in_background: true`), annoncer en une ligne
+- **≥ 3 agents simultanés** ou **opus/fable ad-hoc** → demander accord avant
+
 Après chaque agent `coder`, lancer un agent reviewer associé.
 
 **Reviewer : utiliser `subagent_type: "claude"`, jamais `"code-reviewer"`** — ce dernier a `model: opus` hardcodé, désactivé sur ce compte (403).
 
+**Review inline** : si pas d'agent disponible, faire la review directement dans le contexte principal (lire le diff, vérifier les changements). Un agent n'est pas obligatoire.
+
 **Réutiliser les agents existants** via `SendMessage(to: agentId)` pour les tâches successives sur les mêmes fichiers — le cache est chaud, moins de tokens. Spawner un nouvel agent uniquement si le contexte a trop dérivé. Note : `SendMessage` n'est pas disponible dans `subagent_type: "fork"`.
+
+**Fork pour exploration** : utiliser `subagent_type: "fork"` pour les recherches, investigations, ou tâches lourdes dont l'output n'est pas utile dans le contexte principal. Le fork hérite du contexte et partage le cache — moins cher qu'un fresh agent pour de l'exploration bornée.
 
 ### Stack
 

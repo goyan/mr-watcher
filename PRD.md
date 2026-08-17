@@ -20,7 +20,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F7 | Âge de la MR (`Xj` / `Xh`) | ✅ done |
 | F8 | Badge DRAFT | ✅ done |
 | F9 | Label projet multi-repo (`[millenium]` / `[terragrunt]` / etc.) | ✅ done |
-| F10 | État mergé affiché par l'icône `🔀`, distincte des labels entre crochets | ✅ done |
+| F10 | Date de merge affichée avec âge inline (`Mergée: Xj`) et tooltip date complète en StatusView | ✅ done |
 | F11 | MRs mergées conservées après redémarrage, jusqu'à `Retirer` | ✅ done |
 | F12 | 10 dernières MRs mergées chargées depuis GitLab au démarrage | ✅ done |
 

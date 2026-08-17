@@ -70,6 +70,21 @@
 
 ---
 
+## Session 2026-08-17
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| `MRSummary.mergedAt: Date?` décodé depuis `merged_at` GitLab API | ✅ |
+| MenuBarView : `"Créée: Xj"` + `"Mergée: Xj"` dans `headerLine` (remplace `🔀` et âge brut) | ✅ |
+| StatusView : idem + tooltip `formatDate` sur chaque date | ✅ |
+| Fix tooltip StatusView : suppression `.help()` outer sur Button `mrRow` (masquait les `.help()` internes) | ✅ |
+| `DateFormatter` static dans `MenuBarView` et `StatusView` (perf) | ✅ |
+| `AGENTS.md` enrichi : seuil délégation, review inline, fork pattern | ✅ |
+
+---
+
 ## Prochaines étapes suggérées
 
 1. ~~Feedback `/rebase`~~ ✅

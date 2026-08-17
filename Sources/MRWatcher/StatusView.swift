@@ -269,7 +269,6 @@ struct StatusView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Ouvrir !\(mr.iid) dans GitLab")
 
             trailingActions(for: mr)
                 .frame(width: 250, alignment: .trailing)
@@ -374,8 +373,11 @@ struct StatusView: View {
     @ViewBuilder
     private func stateMetadata(for mr: MRSummary) -> some View {
         if mr.state == "merged" {
-            Label("Mergée", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.secondary)
+            if let mergedAt = mr.mergedAt {
+                Text("Mergée: \(ageString(mergedAt))")
+                    .foregroundStyle(.secondary)
+                    .help(formatDate(mergedAt))
+            }
         } else {
             if mr.isDraft {
                 Text("DRAFT")
@@ -397,8 +399,31 @@ struct StatusView: View {
             approvalMetadata(for: mr)
         }
 
-        Text(ageString(mr.createdAt))
+        Text("Créée: \(ageString(mr.createdAt))")
             .foregroundStyle(.secondary)
+            .help(formatDate(mr.createdAt))
+    }
+
+    private static let dateFormatterCurrentYear: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "d MMM"
+        return f
+    }()
+
+    private static let dateFormatterOtherYear: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "d MMM yyyy"
+        return f
+    }()
+
+    private func formatDate(_ date: Date?) -> String {
+        guard let date else { return "?" }
+        let formatter = Calendar.current.component(.year, from: date) == Calendar.current.component(.year, from: Date())
+            ? Self.dateFormatterCurrentYear
+            : Self.dateFormatterOtherYear
+        return formatter.string(from: date)
     }
 
     @ViewBuilder

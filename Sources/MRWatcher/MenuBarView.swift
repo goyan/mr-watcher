@@ -166,9 +166,6 @@ struct MenuBarView: View {
             parts.append(ticket)
         }
 
-        // Merged: keep brackets reserved for Jira and project statuses.
-        if mr.state == "merged" { parts.append("🔀") }
-
         // Draft
         if mr.isDraft { parts.append("[DRAFT]") }
 
@@ -198,7 +195,10 @@ struct MenuBarView: View {
         }
 
         // Âge
-        parts.append(ageString(mr.createdAt))
+        parts.append("Créée: \(ageString(mr.createdAt))")
+        if mr.state == "merged", let mergedAt = mr.mergedAt {
+            parts.append("Mergée: \(ageString(mergedAt))")
+        }
 
         // Statut Jira
         if let jira = store.jiraStatuses[key] {
@@ -255,6 +255,28 @@ struct MenuBarView: View {
         if h < 1  { return "<1h" }
         if h < 24 { return "\(h)h" }
         return "\(h / 24)j"
+    }
+
+    private static let dateFormatterCurrentYear: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "d MMM"
+        return f
+    }()
+
+    private static let dateFormatterOtherYear: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "d MMM yyyy"
+        return f
+    }()
+
+    private func formatDate(_ date: Date?) -> String {
+        guard let date else { return "?" }
+        let formatter = Calendar.current.component(.year, from: date) == Calendar.current.component(.year, from: Date())
+            ? Self.dateFormatterCurrentYear
+            : Self.dateFormatterOtherYear
+        return formatter.string(from: date)
     }
 
     private func eventIcon(_ kind: WatchEventKind) -> String {
