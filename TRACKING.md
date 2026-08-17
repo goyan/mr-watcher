@@ -97,3 +97,14 @@
 8. ~~Push github.com/goyan/mr-watcher~~ ✅
 9. ~~Publier une première release Sparkle signée (`appcast.xml` + ZIP + DMG)~~ ✅ v0.5.0
 10. ~~Tester la mise à jour Sparkle de v0.5.0 vers v0.5.1~~ ✅
+
+---
+
+## Session 2026-08-17 (suite — v0.5.6)
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| Fix tooltip dateRow : dates extraites hors du Button dans `dateRow(for:)` avec `.frame(maxWidth:.infinity)` + `.contentShape(Rectangle())` | ✅ |
+| Tooltip quasi-instantané : `NSInitialToolTipDelay = 0.1` dans App.init | ✅ |
