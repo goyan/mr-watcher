@@ -60,6 +60,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | I9 | Mise à jour manuelle Sparkle : ZIP et appcast EdDSA signés, vérifiés avant extraction | ✅ done |
 | I10 | Version installée affichée dans le pied de la fenêtre principale | ✅ done |
 | I11 | Sécurité runtime : PAT sans redirection inter-origine et `.env` privé vérifié | ✅ done |
+| I12 | Panneau de barre de menus : vues À traiter/Toutes, cartes MR, actions contextuelles et états de survol | ✅ done |
 
 ---
 
@@ -82,3 +83,12 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 |-----|-------------|
 | Approvals | `required = given + approvalsLeft` — aligne avec GitLab UI (était 0/3 au lieu de 0/2) |
 | Sparkle | `SUEnableAutomaticChecks=true`, `SUScheduledCheckInterval=3600` — check auto toutes les heures |
+
+## v0.5.10 — Redesign du panneau de barre de menus
+
+| Évolution | Description |
+|-----------|-------------|
+| Panneau interactif | `MenuBarExtra(.window)` avec vue `À traiter` / `Toutes`, entête de synchronisation et pied compact |
+| MRs structurées | Cartes à informations hiérarchisées, SF Symbols et actions GitLab/Jira distinctes |
+| Actions | `/rebase` contextuel avec confirmation, retrait des MRs mergées, réglages, mise à jour et sortie conservés |
+| Interaction | États de survol sur les MRs et leurs actions contextuelles |

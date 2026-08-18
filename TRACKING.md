@@ -2,7 +2,7 @@
 
 ## État actuel
 
-- **Version** : 0.5.2
+- **Version** : 0.5.10
 - **Build** : ✅ `swift build -c release`, bundle Sparkle et archives signées publiés
 - **Installé** : `/Applications/MRWatcher.app` (codesign ad-hoc)
 - **PAT** : configuré dans `~/.env` (token glab Millenium)
@@ -129,3 +129,16 @@
 |------|----------|
 | Fix approvals : `required = given + approvalsLeft` (source de vérité GitLab, aligne avec l'UI) | ✅ |
 | Sparkle auto-check : `SUEnableAutomaticChecks=true` + `SUScheduledCheckInterval=3600` dans install.sh | ✅ |
+
+## Session 2026-08-18 (v0.5.10)
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| Redesign du panneau de barre de menus | ✅ `MenuBarExtra(.window)` avec panneau interactif compact |
+| Navigation | ✅ vues `À traiter` et `Toutes`, MRs mergées repliées |
+| Lignes MR | ✅ cartes structurées, SF Symbols, accès GitLab et Jira séparés |
+| Actions | ✅ refresh, `/rebase` confirmé, retrait, événements, réglages, mise à jour et sortie préservés |
+| Feedback | ✅ survol de la MR et des actions contextuelles |
+| Validation | ✅ build release, 5 tests runtime et installation locale |

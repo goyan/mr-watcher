@@ -46,7 +46,12 @@ struct MRWatcherApp: App {
         }
 
         MenuBarExtra {
-            MenuBarView(store: store, scheduler: scheduler, setupController: setupController) {
+            MenuBarView(
+                store: store,
+                scheduler: scheduler,
+                setupController: setupController,
+                updaterController: updaterController
+            ) {
                 seenEventIds.formUnion(store.events.map(\.id))
             }
         } label: {
@@ -56,7 +61,13 @@ struct MRWatcherApp: App {
                     Text("\(unreadCount)").font(.caption.bold())
                 }
             }
+            .accessibilityLabel(unreadCount > 0
+                ? "MR Watcher, \(unreadCount) nouvel événement"
+                : "MR Watcher")
+            .help(unreadCount > 0
+                ? "MR Watcher : \(unreadCount) nouvel événement"
+                : "MR Watcher")
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 }
