@@ -120,3 +120,12 @@
 | Tooltip date instantané : remplacement `.help()` par `.onHover` overlay custom (`DateLabelView`) | ✅ |
 | Zone de hover séparée par date (Créée / Mergée), overlay positionné au-dessus du texte | ✅ |
 | App.swift : purge `UserDefaults NSInitialToolTipDelay` au lancement (nettoyage v0.5.6) | ✅ |
+
+## Session 2026-08-18 (v0.5.9)
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| Fix approvals : `required = given + approvalsLeft` (source de vérité GitLab, aligne avec l'UI) | ✅ |
+| Sparkle auto-check : `SUEnableAutomaticChecks=true` + `SUScheduledCheckInterval=3600` dans install.sh | ✅ |

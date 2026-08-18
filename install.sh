@@ -109,7 +109,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
   <key>SUPublicEDKey</key><string>WVZl0Cunt1pb4SuDL0WFNiFaYLTcU7M5rwYJA547rGA=</string>
   <key>SURequireSignedFeed</key><true/>
   <key>SUVerifyUpdateBeforeExtraction</key><true/>
-  <key>SUEnableAutomaticChecks</key><false/>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>3600</integer>
 </dict></plist>
 PLIST
 

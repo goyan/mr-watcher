@@ -63,9 +63,11 @@ private struct DiscussionResponse: Codable {
 
 private struct ApprovalsResponse: Codable {
     let approvalsRequired: Int
+    let approvalsLeft: Int
     let approvedBy: [ApprovedByEntry]
     enum CodingKeys: String, CodingKey {
         case approvalsRequired = "approvals_required"
+        case approvalsLeft = "approvals_left"
         case approvedBy = "approved_by"
     }
     struct ApprovedByEntry: Codable { let user: ApproverUser }
@@ -241,9 +243,11 @@ final class GitLabService {
             return firstNote.resolved == false
         }.count
 
+        let given = humanApprovals.count
+        let required = given + decoded.approvalsLeft
         return MRApprovals(
-            required: decoded.approvalsRequired,
-            given: humanApprovals.count,
+            required: required,
+            given: given,
             unresolvedThreads: unresolvedCount
         )
     }

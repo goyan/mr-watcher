@@ -75,3 +75,10 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | B4 | Support multi-auteurs (reviewer assigné à moi) | basse |
 | B5 | ~~Intervalle de poll configurable via UI~~ | ✅ done — A4 |
 | B6 | Login Items automatique à l'installation | basse |
+
+## v0.5.9 — Fix approvals + Sparkle auto-check
+
+| Fix | Description |
+|-----|-------------|
+| Approvals | `required = given + approvalsLeft` — aligne avec GitLab UI (était 0/3 au lieu de 0/2) |
+| Sparkle | `SUEnableAutomaticChecks=true`, `SUScheduledCheckInterval=3600` — check auto toutes les heures |
