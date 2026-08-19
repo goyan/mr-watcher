@@ -66,15 +66,28 @@ enum SecureDotEnvFile {
 final class ConfigManager {
     static let shared = ConfigManager()
     static let defaultReviewLabels = ["Indigo", "indigo"]
+    static let defaultTicketPrefix = "PROD"
 
     private let keychainService = "mr-watcher"
-    private let defaultHost = "gitlab.factory.fonciamillenium.net"
+    // Vide par défaut : une app non configurée doit rester non configurée, pas pointer
+    // vers l'instance GitLab d'un employeur particulier. L'exemple vit dans le
+    // placeholder du champ (SetupView), pas ici.
+    private let defaultHost = ""
     private let reviewLabelsDefaultsKey = "reviewLabels"
+    private let jiraBaseURLDefaultsKey = "jiraBaseURL"
+    private let ticketPrefixDefaultsKey = "ticketPrefix"
 
     private(set) var gitlabPAT: String?
     private(set) var gitlabHost: String = ""
     private(set) var gitlabUsername: String?
     private(set) var reviewLabels: [String] = ConfigManager.defaultReviewLabels
+    /// Base de l'URL Jira (ex. `https://votre-org.atlassian.net`), sans slash final.
+    /// Vide par défaut : tant qu'elle n'est pas renseignée, le ticket reste affiché
+    /// mais n'est pas transformé en lien — on n'invente pas une URL.
+    private(set) var jiraBaseURL: String = ""
+    /// Préfixe des tickets détectés dans les branches/titres (ex. `PROD`). Défaut
+    /// `PROD` pour ne rien casser chez l'utilisateur actuel.
+    private(set) var ticketPrefix: String = ConfigManager.defaultTicketPrefix
 
     var reviewLabelsInput: String {
         reviewLabels.joined(separator: ", ")
@@ -97,12 +110,30 @@ final class ConfigManager {
         reviewLabels = normalizedReviewLabels(
             from: UserDefaults.standard.string(forKey: reviewLabelsDefaultsKey) ?? ""
         )
+        jiraBaseURL = normalizedJiraBaseURL(
+            from: UserDefaults.standard.string(forKey: jiraBaseURLDefaultsKey) ?? ""
+        )
+        ticketPrefix = normalizedTicketPrefix(
+            from: UserDefaults.standard.string(forKey: ticketPrefixDefaultsKey) ?? ""
+        )
     }
 
     func saveReviewLabels(_ input: String) {
         let labels = normalizedReviewLabels(from: input)
         reviewLabels = labels
         UserDefaults.standard.set(labels.joined(separator: ", "), forKey: reviewLabelsDefaultsKey)
+    }
+
+    func saveJiraBaseURL(_ input: String) {
+        let url = normalizedJiraBaseURL(from: input)
+        jiraBaseURL = url
+        UserDefaults.standard.set(url, forKey: jiraBaseURLDefaultsKey)
+    }
+
+    func saveTicketPrefix(_ input: String) {
+        let prefix = normalizedTicketPrefix(from: input)
+        ticketPrefix = prefix
+        UserDefaults.standard.set(prefix, forKey: ticketPrefixDefaultsKey)
     }
 
     private func normalizeHost(_ raw: String) -> String {
@@ -122,6 +153,23 @@ final class ConfigManager {
         var seen: Set<String> = []
         let uniqueLabels = labels.filter { seen.insert($0).inserted }
         return uniqueLabels.isEmpty ? Self.defaultReviewLabels : uniqueLabels
+    }
+
+    /// Vide reste vide (pas de lien) : contrairement au préfixe, il n'y a pas de
+    /// valeur par défaut à retrouver. Retire un éventuel slash final pour construire
+    /// `\(jiraBaseURL)/browse/\(ticket)` sans double slash.
+    private func normalizedJiraBaseURL(from input: String) -> String {
+        var url = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty else { return "" }
+        while url.hasSuffix("/") {
+            url.removeLast()
+        }
+        return url
+    }
+
+    private func normalizedTicketPrefix(from input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? Self.defaultTicketPrefix : trimmed
     }
 
     private func loadDotEnv() -> [String: String] {

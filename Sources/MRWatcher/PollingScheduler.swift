@@ -163,7 +163,7 @@ final class PollingScheduler {
         guard let mr = (store.mrs + store.reviewedMRs + store.reviewableMRs).first(where: {
                   MRKey(projectId: $0.projectId, iid: $0.iid) == key
               }),
-              let issueKey = extractProdTicket(from: mr) else {
+              let issueKey = extractTicket(from: mr, prefix: ConfigManager.shared.ticketPrefix) else {
             return
         }
         store.beginJiraLoading(for: [key])
@@ -597,6 +597,7 @@ final class PollingScheduler {
             var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
             var jiraError: String?
             if jira.isAvailable {
+                let ticketPrefix = await MainActor.run { ConfigManager.shared.ticketPrefix }
                 for mr in jiraMRs {
                     if Task.isCancelled {
                         await MainActor.run {
@@ -607,7 +608,7 @@ final class PollingScheduler {
                         }
                         return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
                     }
-                    guard let issueKey = extractProdTicket(from: mr) else { continue }
+                    guard let issueKey = extractTicket(from: mr, prefix: ticketPrefix) else { continue }
                     let key = MRKey(projectId: mr.projectId, iid: mr.iid)
                     guard Self.latestJiraPublicationToken == jiraPublicationToken else {
                         return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
@@ -681,9 +682,12 @@ private extension Int {
     func atLeast(_ minimum: Int) -> Int { self <= 0 ? minimum : self }
 }
 
-private func extractProdTicket(from mr: MRSummary) -> String? {
+/// Le préfixe est échappé avant d'entrer dans la regex : un préfixe contenant un
+/// métacaractère (`.`, `+`, `*`…) casserait silencieusement la détection sinon.
+private func extractTicket(from mr: MRSummary, prefix: String) -> String? {
     func find(in s: String) -> String? {
-        guard let range = s.range(of: #"PROD-\d+"#, options: .regularExpression) else { return nil }
+        let escapedPrefix = NSRegularExpression.escapedPattern(for: prefix)
+        guard let range = s.range(of: "\(escapedPrefix)-\\d+", options: .regularExpression) else { return nil }
         return String(s[range])
     }
     return find(in: mr.sourceBranch) ?? find(in: mr.title)

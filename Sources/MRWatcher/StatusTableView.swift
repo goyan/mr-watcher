@@ -30,6 +30,11 @@ struct StatusTableView: View {
     let openRows: [MRRowModel]
     let mergedRows: [MergedRowModel]
     let mrLookup: [MRKey: MRSummary]
+    /// Base de l'URL Jira (`ConfigManager.jiraBaseURL`), sans slash final. Vide tant
+    /// que l'utilisateur ne l'a pas renseignée : le ticket reste alors affiché mais
+    /// n'est plus un lien (ni bouton, ni curseur de lien, ni tooltip) — on n'invente
+    /// pas l'URL d'un employeur particulier.
+    let jiraBaseURL: String
     let refreshingKeys: Set<MRKey>
     let manualActions: [MRKey: [ManualPipelineAction]]
     let launchingJobIds: Set<Int>
@@ -132,7 +137,7 @@ struct StatusTableView: View {
                 .fill(row.state.tone.semanticTagTone.foreground)
                 .frame(width: DesignTokens.railWidth)
 
-            mrCell(iidLabel: row.iidLabel, ticket: row.ticket, webUrl: row.webUrl)
+            mrCell(iidLabel: row.iidLabel, webUrl: row.webUrl)
                 .frame(width: StatusColumn.mr, alignment: .leading)
 
             titleCell(row)
@@ -198,34 +203,30 @@ struct StatusTableView: View {
         return parts.joined(separator: ", ")
     }
 
-    private func mrCell(iidLabel: String, ticket: String?, webUrl: String) -> some View {
-        VStack(alignment: .leading, spacing: DesignTokens.cellGap) {
-            Button {
-                callbacks.openURL(webUrl)
-            } label: {
-                Text(verbatim: iidLabel)
-                    .font(.system(.callout, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.plain)
-            .help("Ouvrir \(iidLabel) dans GitLab")
-            .immediateTooltip("Ouvrir \(iidLabel) dans GitLab")
-            .accessibilityLabel("Ouvrir la merge request \(iidLabel) dans GitLab")
-
-            if let ticket {
-                Button {
-                    callbacks.openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-                } label: {
-                    Text(ticket)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.blue)
-                }
-                .buttonStyle(.plain)
-                .help("Ouvrir \(ticket) dans Jira")
-                .immediateTooltip("Ouvrir \(ticket) dans Jira")
-                .accessibilityLabel("Ouvrir \(ticket) dans Jira")
-            }
+    /// Cible unique sur toute la cellule (correctif ergonomie : deux liens empilés —
+    /// `!IID` et le ticket — dans 65 pt de large ne laissaient aucune marge de clic ;
+    /// mesuré via l'API Accessibilité, la cellule était pleine, pas seulement étroite).
+    /// Le ticket a rejoint le tag Jira en ligne 2 de la cellule Titre (`ticketTag`).
+    private func mrCell(iidLabel: String, webUrl: String) -> some View {
+        Button {
+            callbacks.openURL(webUrl)
+        } label: {
+            Text(verbatim: iidLabel)
+                .font(.system(.callout, design: .monospaced).weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help("Ouvrir \(iidLabel) dans GitLab")
+        .immediateTooltip("Ouvrir \(iidLabel) dans GitLab")
+        .accessibilityLabel("Ouvrir la merge request \(iidLabel) dans GitLab")
+    }
+
+    /// `nil` tant que `jiraBaseURL` n'est pas renseignée — on n'invente pas une URL.
+    private func jiraURL(for ticket: String) -> String? {
+        guard !jiraBaseURL.isEmpty else { return nil }
+        return "\(jiraBaseURL)/browse/\(ticket)"
     }
 
     @ViewBuilder
@@ -251,11 +252,7 @@ struct StatusTableView: View {
                 if row.isDraft {
                     SemanticTag(title: "Draft", systemImage: "pencil", tone: .neutral)
                 }
-                if let jira = row.jira {
-                    jiraTag(jira, ticket: row.ticket)
-                } else if row.isJiraLoading {
-                    SemanticTag(title: "Jira...", systemImage: "ticket", tone: .neutral)
-                }
+                ticketTag(ticket: row.ticket, jira: row.jira, isJiraLoading: row.isJiraLoading)
             }
         }
     }
@@ -306,18 +303,8 @@ struct StatusTableView: View {
         HStack(alignment: .center, spacing: DesignTokens.columnGutter) {
             Color.clear.frame(width: DesignTokens.railWidth)
 
-            Button {
-                callbacks.openURL(row.webUrl)
-            } label: {
-                Text(verbatim: row.iidLabel)
-                    .font(.system(.callout, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.plain)
-            .help("Ouvrir \(row.iidLabel) dans GitLab")
-            .immediateTooltip("Ouvrir \(row.iidLabel) dans GitLab")
-            .accessibilityLabel("Ouvrir la merge request \(row.iidLabel) dans GitLab")
-            .frame(width: MergedColumn.mr, alignment: .leading)
+            mrCell(iidLabel: row.iidLabel, webUrl: row.webUrl)
+                .frame(width: MergedColumn.mr, alignment: .leading)
 
             Button {
                 callbacks.openURL(row.webUrl)
@@ -336,12 +323,8 @@ struct StatusTableView: View {
             .accessibilityLabel("Ouvrir la merge request \(row.iidLabel), \(row.displayTitle), dans GitLab")
             .frame(minWidth: MergedColumn.titleMinWidth, maxWidth: .infinity, alignment: .leading)
 
-            Group {
-                if let jira = row.jira {
-                    jiraTag(jira, ticket: nil)
-                }
-            }
-            .frame(width: MergedColumn.jira, alignment: .leading)
+            ticketTag(ticket: row.ticket, jira: row.jira, isJiraLoading: false)
+                .frame(width: MergedColumn.jira, alignment: .leading)
 
             Text(row.dateLabel)
                 .font(.caption)
@@ -415,7 +398,7 @@ struct StatusTableView: View {
                 .fill(row.state.tone.semanticTagTone.foreground)
                 .frame(width: DesignTokens.railWidth)
 
-            mrCell(iidLabel: row.iidLabel, ticket: row.ticket, webUrl: row.webUrl)
+            mrCell(iidLabel: row.iidLabel, webUrl: row.webUrl)
                 .frame(width: ReviewColumn.mr, alignment: .leading)
 
             reviewerTitleCell(row)
@@ -493,11 +476,7 @@ struct StatusTableView: View {
             .accessibilityLabel("Ouvrir la merge request \(row.iidLabel), \(row.displayTitle), dans GitLab")
 
             HStack(spacing: DesignTokens.cellGap) {
-                if let jira = row.jira {
-                    jiraTag(jira, ticket: row.ticket)
-                } else if row.isJiraLoading {
-                    SemanticTag(title: "Jira...", systemImage: "ticket", tone: .neutral)
-                }
+                ticketTag(ticket: row.ticket, jira: row.jira, isJiraLoading: row.isJiraLoading)
                 // Le retard n'est pas une colonne en revue (correctif plan §9.5) : méta
                 // discrète non teintée, pas de pastille — je ne rebase pas la MR d'un autre.
                 if let divergedLabel = row.divergedLabel, let divergedCount = row.divergedCount {
@@ -533,7 +512,10 @@ struct StatusTableView: View {
 
     /// Une ligne de la cellule Implication : `label`/`tone`/`noteId` viennent groupés
     /// de `ImplicationLine` (StatusPresentation.swift) — jamais redérivés ici. Pas de
-    /// lien si l'ancre est `nil` (comportement actuel, ex. « Approuvée ✓ »).
+    /// lien si l'ancre est `nil` (comportement actuel, ex. « Approuvée ✓ »). Cible
+    /// étendue à toute la largeur de la colonne (`maxWidth: .infinity` + `contentShape`,
+    /// correctif ergonomie) — sans fusionner primaire et secondaire, qui restent deux
+    /// lignes/ancres distinctes portées par deux appels séparés.
     @ViewBuilder
     private func implicationLineView(_ line: ImplicationLine, webUrl: String) -> some View {
         if let noteId = line.noteId {
@@ -543,6 +525,8 @@ struct StatusTableView: View {
                 Text(line.label)
                     .font(.caption)
                     .foregroundStyle(line.tone.semanticTagTone.foreground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Ouvrir le fil dans GitLab")
@@ -649,19 +633,50 @@ struct StatusTableView: View {
         }
     }
 
-    private func jiraTag(_ jira: JiraStatusDisplay, ticket: String?) -> some View {
-        Group {
-            if let ticket {
+    /// Contenu (hors vue) de la pastille ticket+statut : calculé à part d'un
+    /// `@ViewBuilder`, qui n'accepte pas un `if/else` ne construisant que des
+    /// affectations sans vue.
+    private func ticketTagContent(
+        ticket: String,
+        jira: JiraStatusDisplay?,
+        isJiraLoading: Bool
+    ) -> (label: String, tone: RowTone, systemImage: String) {
+        if let jira {
+            return ("\(ticket) · \(jira.label)", jira.tone, jiraSystemImage(for: jira))
+        }
+        if isJiraLoading {
+            return ("\(ticket) · Jira...", .neutral, "ticket")
+        }
+        return (ticket, .neutral, "ticket")
+    }
+
+    /// Fusionne le ticket et son statut Jira dans une seule pastille cliquable
+    /// (`PROD-30065 · Code review`), motif déjà utilisé par le popover
+    /// (`MenuBarView.jiraButton`) — une seule cible plutôt que deux liens empilés
+    /// (`!IID` / ticket) qui ne laissaient aucune marge de clic. Statut sans ticket :
+    /// impossible par construction (le statut vient du ticket), pas de cas à inventer.
+    @ViewBuilder
+    private func ticketTag(ticket: String?, jira: JiraStatusDisplay?, isJiraLoading: Bool) -> some View {
+        if let ticket {
+            let content = ticketTagContent(ticket: ticket, jira: jira, isJiraLoading: isJiraLoading)
+            let label = content.label
+            let tone = content.tone
+            let systemImage = content.systemImage
+
+            if let url = jiraURL(for: ticket) {
                 Button {
-                    callbacks.openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
+                    callbacks.openURL(url)
                 } label: {
-                    SemanticTag(title: jira.label, systemImage: jiraSystemImage(for: jira), tone: jira.tone.semanticTagTone)
+                    SemanticTag(title: label, systemImage: systemImage, tone: tone.semanticTagTone)
                 }
                 .buttonStyle(.plain)
                 .help("Ouvrir \(ticket) dans Jira")
                 .immediateTooltip("Ouvrir \(ticket) dans Jira")
             } else {
-                SemanticTag(title: jira.label, systemImage: jiraSystemImage(for: jira), tone: jira.tone.semanticTagTone)
+                // Pas d'URL Jira configurée : la pastille reste affichée, mais sans
+                // lien — ni bouton, ni curseur de lien, ni tooltip (pas de contrôle
+                // qui a l'air actif et ne réagit pas).
+                SemanticTag(title: label, systemImage: systemImage, tone: tone.semanticTagTone)
             }
         }
     }

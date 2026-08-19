@@ -26,7 +26,7 @@ final class SetupWindowController: NSObject {
             }
         )
         let hosting = NSHostingController(rootView: content)
-        let panelSize = NSSize(width: 420, height: 520)
+        let panelSize = NSSize(width: 480, height: 680)
         hosting.view.setFrameSize(panelSize)
         let p = NSPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),

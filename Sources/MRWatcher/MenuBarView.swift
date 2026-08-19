@@ -112,6 +112,8 @@ struct MenuBarView: View {
 
             jiraWarning
 
+            jiraConfigWarning
+
             Button {
                 Task { await scheduler.pollNow() }
             } label: {
@@ -175,6 +177,34 @@ struct MenuBarView: View {
                 .accessibilityLabel("Jira indisponible : \(error)")
         }
     }
+
+    /// Même bandeau que `StatusView.jiraConfigWarning`, tenue courte adaptée au menu.
+    private var hasAnyDetectedTicket: Bool {
+        (store.mrs + store.reviewedMRs + store.reviewableMRs).contains { ticket(for: $0) != nil }
+    }
+
+    @ViewBuilder
+    private var jiraConfigWarning: some View {
+        if ConfigManager.shared.jiraBaseURL.isEmpty && hasAnyDetectedTicket {
+            Button {
+                setupController.open(store: store, scheduler: scheduler)
+            } label: {
+                Label("URL Jira non configurée", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .help(Self.jiraConfigWarningTooltip)
+            .immediateTooltip(Self.jiraConfigWarningTooltip)
+            .accessibilityLabel(
+                "URL Jira non configurée. \(Self.jiraConfigWarningTooltip) Cliquer pour ouvrir les réglages."
+            )
+        }
+    }
+
+    private static let jiraConfigWarningTooltip =
+        "Les tickets ne sont pas cliquables tant que l'URL de votre instance Jira n'est pas renseignée. Réglages → Jira."
 
     @ViewBuilder
     private var content: some View {
@@ -566,20 +596,28 @@ struct MenuBarView: View {
     private func jiraButton(for mr: MRSummary) -> some View {
         if let ticket = ticket(for: mr) {
             let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-            Button {
-                openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-            } label: {
-                SemanticTag(
-                    title: store.jiraStatuses[key].map { "\(ticket) · \($0.name)" }
-                        ?? (store.jiraLoadingMRKeys.contains(key) ? "\(ticket) · Jira..." : ticket),
-                    systemImage: "ticket",
-                    tone: jiraTone(for: mr)
-                )
+            let tag = SemanticTag(
+                title: store.jiraStatuses[key].map { "\(ticket) · \($0.name)" }
+                    ?? (store.jiraLoadingMRKeys.contains(key) ? "\(ticket) · Jira..." : ticket),
+                systemImage: "ticket",
+                tone: jiraTone(for: mr)
+            )
+            if !ConfigManager.shared.jiraBaseURL.isEmpty {
+                Button {
+                    openURL("\(ConfigManager.shared.jiraBaseURL)/browse/\(ticket)")
+                } label: {
+                    tag
+                }
+                .buttonStyle(.plain)
+                .help("Ouvrir \(ticket) dans Jira")
+                .immediateTooltip("Ouvrir \(ticket) dans Jira")
+                .accessibilityLabel("Ouvrir le ticket \(ticket) dans Jira")
+            } else {
+                // Pas d'URL Jira configurée : le tag s'affiche mais n'est pas un
+                // bouton — un contrôle qui a l'air actif et ne réagit pas est un
+                // petit mensonge d'interface.
+                tag
             }
-            .buttonStyle(.plain)
-            .help("Ouvrir \(ticket) dans Jira")
-            .immediateTooltip("Ouvrir \(ticket) dans Jira")
-            .accessibilityLabel("Ouvrir le ticket \(ticket) dans Jira")
         }
     }
 
@@ -1187,7 +1225,8 @@ struct MenuBarView: View {
     }
 
     private func ticket(in value: String) -> String? {
-        guard let range = value.range(of: #"PROD-\d+"#, options: .regularExpression) else {
+        let escapedPrefix = NSRegularExpression.escapedPattern(for: ConfigManager.shared.ticketPrefix)
+        guard let range = value.range(of: "\(escapedPrefix)-\\d+", options: .regularExpression) else {
             return nil
         }
         return String(value[range])

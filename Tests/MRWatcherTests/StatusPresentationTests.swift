@@ -21,7 +21,7 @@ final class StatusPresentationTests: XCTestCase {
         title: String = "fix(plato): correction d'un bug",
         webUrl: String = "https://gitlab.example.test/millenium/-/merge_requests/1",
         notesCount: Int = 0,
-        sourceBranch: String = "fix/PROD-30746-correction",
+        sourceBranch: String = "fix/PROD-10001-correction",
         isDraft: Bool = false,
         createdAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
         mergedAt: Date? = nil,
@@ -212,7 +212,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now, divergedCommitsCount: 12, hasConflicts: true)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.state.label, "Conflit")
         XCTAssertEqual(rows.first?.hasConflicts, true)
@@ -223,7 +223,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now, hasConflicts: false)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.hasConflicts, false)
     }
@@ -253,7 +253,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now, headPipeline: pipeline)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.pipelineWebUrl, "https://gitlab.example.test/pipelines/1")
     }
@@ -281,6 +281,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .author,
+            ticketPrefix: "PROD",
             now: now
         )
 
@@ -299,6 +300,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .author,
+            ticketPrefix: "PROD",
             now: now
         )
 
@@ -326,6 +328,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .reviewer,
+            ticketPrefix: "PROD",
             now: now
         )
 
@@ -344,6 +347,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .reviewer,
+            ticketPrefix: "PROD",
             now: now
         )
 
@@ -365,7 +369,7 @@ final class StatusPresentationTests: XCTestCase {
             state: "merged"
         )
 
-        let rows = buildMergedRows(mrs: [mergedFirst, mergedLast], jiraStatuses: [:], now: now)
+        let rows = buildMergedRows(mrs: [mergedFirst, mergedLast], jiraStatuses: [:], ticketPrefix: "PROD", now: now)
 
         XCTAssertEqual(rows.map(\.key.iid), [2, 1])
     }
@@ -382,6 +386,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .author,
+            ticketPrefix: "PROD",
             now: now
         )
 
@@ -462,6 +467,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .author,
+            ticketPrefix: "PROD",
             now: now
         )
         XCTAssertEqual(rows.first?.iidLabel, "!57020")
@@ -469,22 +475,22 @@ final class StatusPresentationTests: XCTestCase {
 
     func testTicketFoundInBranch() {
         let now = Date()
-        let mr = makeMR(title: "fix(plato): sans mention", sourceBranch: "fix/PROD-30746-correction", createdAt: now)
+        let mr = makeMR(title: "fix(plato): sans mention", sourceBranch: "fix/PROD-10001-correction", createdAt: now)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
-        XCTAssertEqual(rows.first?.ticket, "PROD-30746")
+        XCTAssertEqual(rows.first?.ticket, "PROD-10001")
     }
 
     func testTicketFallsBackToTitleWhenAbsentFromBranch() {
         let now = Date()
-        let mr = makeMR(title: "fix(plato): correctif (PROD-30065)", sourceBranch: "fix/no-ticket", createdAt: now)
+        let mr = makeMR(title: "fix(plato): correctif (PROD-10002)", sourceBranch: "fix/no-ticket", createdAt: now)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
-        XCTAssertEqual(rows.first?.ticket, "PROD-30065")
+        XCTAssertEqual(rows.first?.ticket, "PROD-10002")
     }
 
     func testTicketNilWhenAbsentFromBothBranchAndTitle() {
@@ -492,35 +498,104 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(title: "fix(plato): correctif générique", sourceBranch: "fix/no-ticket", createdAt: now)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertNil(rows.first?.ticket)
+    }
+
+    /// `ticketPrefix` est un réglage utilisateur (`ConfigManager`) — la détection doit
+    /// suivre un préfixe personnalisé, pas rester figée sur `PROD`.
+    func testTicketDetectedInBranchWithCustomPrefix() {
+        let now = Date()
+        let mr = makeMR(title: "fix(core): sans mention", sourceBranch: "fix/ACME-42-correction", createdAt: now)
+        let rows = buildRows(
+            mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "ACME", now: now
+        )
+        XCTAssertEqual(rows.first?.ticket, "ACME-42")
+    }
+
+    func testTicketDetectedInTitleWithCustomPrefixWhenAbsentFromBranch() {
+        let now = Date()
+        let mr = makeMR(title: "fix(core): correctif (ACME-42)", sourceBranch: "fix/no-ticket", createdAt: now)
+        let rows = buildRows(
+            mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "ACME", now: now
+        )
+        XCTAssertEqual(rows.first?.ticket, "ACME-42")
+    }
+
+    func testTicketNilWhenCustomPrefixAbsentFromBothBranchAndTitle() {
+        let now = Date()
+        let mr = makeMR(title: "fix(core): correctif générique", sourceBranch: "fix/no-ticket", createdAt: now)
+        let rows = buildRows(
+            mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "ACME", now: now
+        )
+        XCTAssertNil(rows.first?.ticket)
+    }
+
+    /// Un préfixe contenant un métacaractère regex doit être échappé avant d'entrer
+    /// dans la regex — sinon `A.B` matcherait silencieusement `AxB-123` (`.` = un
+    /// caractère quelconque en regex).
+    func testTicketPrefixWithRegexMetacharacterIsEscaped() {
+        let now = Date()
+        let mr = makeMR(title: "fix(core): sans mention", sourceBranch: "fix/AxB-123-correction", createdAt: now)
+        let rows = buildRows(
+            mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "A.B", now: now
+        )
+        XCTAssertNil(rows.first?.ticket)
+    }
+
+    func testTicketPrefixWithRegexMetacharacterStillMatchesLiteralPrefix() {
+        let now = Date()
+        let mr = makeMR(title: "fix(core): sans mention", sourceBranch: "fix/A.B-123-correction", createdAt: now)
+        let rows = buildRows(
+            mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "A.B", now: now
+        )
+        XCTAssertEqual(rows.first?.ticket, "A.B-123")
+    }
+
+    /// `detectedTicket` est le point d'entrée public utilisé par `StatusView` pour
+    /// conditionner le bandeau « URL Jira non configurée » — distinct par son nom
+    /// (pas `extractTicket`) uniquement pour éviter une collision de déclaration avec
+    /// la fonction privée homonyme de `PollingScheduler.swift`, même logique dessous.
+    func testDetectedTicketFindsTicketInBranch() {
+        let mr = makeMR(title: "fix(core): sans mention", sourceBranch: "fix/PROD-9001-correction", createdAt: Date())
+        XCTAssertEqual(detectedTicket(in: mr, prefix: "PROD"), "PROD-9001")
+    }
+
+    func testDetectedTicketNilWhenAbsent() {
+        let mr = makeMR(title: "fix(core): correctif générique", sourceBranch: "fix/no-ticket", createdAt: Date())
+        XCTAssertNil(detectedTicket(in: mr, prefix: "PROD"))
     }
 
     func testDisplayTitleStripsParenthesizedTicketWhenMatching() {
         let now = Date()
         let mr = makeMR(
-            title: "fix(plato): portfolio transfer shows 0 buildings (PROD-30065)",
-            sourceBranch: "fix/PROD-30065-portfolio",
+            title: "fix(core): keep widget list stable when cache is cold (PROD-10002)",
+            sourceBranch: "fix/PROD-10002-widget-list",
             createdAt: now
         )
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
-        XCTAssertEqual(rows.first?.displayTitle, "fix(plato): portfolio transfer shows 0 buildings")
+        XCTAssertEqual(rows.first?.displayTitle, "fix(core): keep widget list stable when cache is cold")
     }
 
     func testDisplayTitleStripsBracketedTicketWhenMatching() {
         let now = Date()
         let mr = makeMR(
-            title: "fix(ms-fees): repricing over future dues [PROD-31008]",
-            sourceBranch: "fix/PROD-31008-repricing",
+            title: "fix(ms-fees): repricing over future dues [PROD-10003]",
+            sourceBranch: "fix/PROD-10003-repricing",
             createdAt: now
         )
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.displayTitle, "fix(ms-fees): repricing over future dues")
     }
@@ -528,13 +603,13 @@ final class StatusPresentationTests: XCTestCase {
     func testDisplayTitleStripsBareTicketSuffixWhenMatching() {
         let now = Date()
         let mr = makeMR(
-            title: "fix(plato): correction PROD-30914",
-            sourceBranch: "fix/PROD-30914-correction",
+            title: "fix(plato): correction PROD-10004",
+            sourceBranch: "fix/PROD-10004-correction",
             createdAt: now
         )
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.displayTitle, "fix(plato): correction")
     }
@@ -543,14 +618,14 @@ final class StatusPresentationTests: XCTestCase {
         let now = Date()
         let mr = makeMR(
             title: "fix(plato): correction (PROD-11111)",
-            sourceBranch: "fix/PROD-30914-correction",
+            sourceBranch: "fix/PROD-10004-correction",
             createdAt: now
         )
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
-        XCTAssertEqual(rows.first?.ticket, "PROD-30914")
+        XCTAssertEqual(rows.first?.ticket, "PROD-10004")
         XCTAssertEqual(rows.first?.displayTitle, "fix(plato): correction (PROD-11111)")
     }
 
@@ -562,7 +637,7 @@ final class StatusPresentationTests: XCTestCase {
         )
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.projectName, "plato")
     }
@@ -572,7 +647,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(webUrl: "https://gitlab.example.test/millenium/plato", createdAt: now)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.projectName, "projet")
     }
@@ -583,7 +658,7 @@ final class StatusPresentationTests: XCTestCase {
         let absent = makeMR(iid: 2, createdAt: now, divergedCommitsCount: nil)
         let rows = buildRows(
             mrs: [zero, absent], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertNil(rows[0].divergedLabel)
         XCTAssertNil(rows[1].divergedLabel)
@@ -594,7 +669,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now, divergedCommitsCount: 9_344)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.divergedLabel, "999+")
         XCTAssertEqual(rows.first?.divergedCount, 9_344)
@@ -605,7 +680,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now, divergedCommitsCount: 183)
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.divergedLabel, "183")
     }
@@ -615,7 +690,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now.addingTimeInterval(-1_800))
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.ageLabel, "<1h")
     }
@@ -625,7 +700,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now.addingTimeInterval(-5 * 3_600))
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.ageLabel, "5h")
     }
@@ -635,7 +710,7 @@ final class StatusPresentationTests: XCTestCase {
         let mr = makeMR(createdAt: now.addingTimeInterval(-3 * 24 * 3_600))
         let rows = buildRows(
             mrs: [mr], approvals: [:], jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .author, now: now
+            testsAreGreen: { _ in true }, context: .author, ticketPrefix: "PROD", now: now
         )
         XCTAssertEqual(rows.first?.ageLabel, "3j")
     }
@@ -688,7 +763,7 @@ final class StatusPresentationTests: XCTestCase {
             mrs: [mr],
             approvals: [MRKey(projectId: mr.projectId, iid: mr.iid): approvals],
             jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .reviewer, now: now
+            testsAreGreen: { _ in true }, context: .reviewer, ticketPrefix: "PROD", now: now
         )
         let implication = rows[0].implication
 
@@ -712,7 +787,7 @@ final class StatusPresentationTests: XCTestCase {
             mrs: [mr],
             approvals: [MRKey(projectId: mr.projectId, iid: mr.iid): approvals],
             jiraStatuses: [:], jiraLoadingKeys: [],
-            testsAreGreen: { _ in true }, context: .reviewer, now: now
+            testsAreGreen: { _ in true }, context: .reviewer, ticketPrefix: "PROD", now: now
         )
         let implication = rows[0].implication
         XCTAssertEqual(implication.primary?.tone, .accent)
@@ -749,6 +824,7 @@ final class StatusPresentationTests: XCTestCase {
             jiraLoadingKeys: [],
             testsAreGreen: { _ in true },
             context: .reviewer,
+            ticketPrefix: "PROD",
             now: now
         )
         return rows[0].implication

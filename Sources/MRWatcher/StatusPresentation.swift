@@ -167,6 +167,10 @@ struct MergedRowModel: Identifiable, Equatable {
     let key: MRKey
     let iidLabel: String
     let displayTitle: String
+    /// Porté séparément de `jira` pour que la vue puisse fusionner ticket + statut
+    /// dans une seule pastille cliquable (`PROD-30065 · ON PROD`) même si le statut
+    /// n'a pas encore chargé, plutôt que deux liens distincts.
+    let ticket: String?
     let jira: JiraStatusDisplay?
     let dateLabel: String
     let webUrl: String
@@ -325,12 +329,26 @@ func chipCounts(
 
 // MARK: - Dérivés
 
-private func extractTicket(from mr: MRSummary) -> String? {
-    findTicket(in: mr.sourceBranch) ?? findTicket(in: mr.title)
+private func extractTicket(from mr: MRSummary, prefix: String) -> String? {
+    findTicket(in: mr.sourceBranch, prefix: prefix) ?? findTicket(in: mr.title, prefix: prefix)
 }
 
-private func findTicket(in value: String) -> String? {
-    guard let range = value.range(of: #"PROD-\d+"#, options: .regularExpression) else {
+// Pas `private`, et nom distinct d'`extractTicket` : `PollingScheduler.swift` a sa
+// propre fonction privée `extractTicket(from:prefix:)` (même logique, dupliquée
+// avant ce fichier — hors scope ici) ; l'exposer sous ce nom entrait en conflit
+// de déclaration avec elle. Utilisée par `StatusView.hasAnyDetectedTicket` pour
+// conditionner le bandeau « URL Jira non configurée » (l'en-tête est partagé par
+// les trois onglets, donc son état ne peut pas se déduire des seules `MRRowModel`
+// déjà construites côté table).
+func detectedTicket(in mr: MRSummary, prefix: String) -> String? {
+    extractTicket(from: mr, prefix: prefix)
+}
+
+/// Le préfixe est échappé avant d'entrer dans la regex : un préfixe contenant un
+/// métacaractère (`.`, `+`, `*`…) casserait silencieusement la détection sinon.
+private func findTicket(in value: String, prefix: String) -> String? {
+    let escapedPrefix = NSRegularExpression.escapedPattern(for: prefix)
+    guard let range = value.range(of: "\(escapedPrefix)-\\d+", options: .regularExpression) else {
         return nil
     }
     return String(value[range])
@@ -437,9 +455,10 @@ private func makeRowModel(
     isJiraLoading: Bool,
     testsAreGreen: Bool,
     context: PresentationContext,
+    ticketPrefix: String,
     now: Date
 ) -> MRRowModel {
-    let ticket = extractTicket(from: mr)
+    let ticket = extractTicket(from: mr, prefix: ticketPrefix)
     return MRRowModel(
         key: key,
         iid: mr.iid,
@@ -475,6 +494,7 @@ func buildRows(
     jiraLoadingKeys: Set<MRKey>,
     testsAreGreen: (MRKey) -> Bool,
     context: PresentationContext,
+    ticketPrefix: String,
     now: Date
 ) -> [MRRowModel] {
     let ranked = mrs
@@ -509,6 +529,7 @@ func buildRows(
             isJiraLoading: jiraLoadingKeys.contains(entry.key),
             testsAreGreen: testsAreGreen(entry.key),
             context: context,
+            ticketPrefix: ticketPrefix,
             now: now
         )
     }
@@ -518,6 +539,7 @@ func buildRows(
 func buildMergedRows(
     mrs: [MRSummary],
     jiraStatuses: [MRKey: JiraIssueStatus],
+    ticketPrefix: String,
     now: Date
 ) -> [MergedRowModel] {
     mrs
@@ -525,7 +547,7 @@ func buildMergedRows(
         .sorted { ($0.mergedAt ?? $0.createdAt) > ($1.mergedAt ?? $1.createdAt) }
         .map { mr in
             let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-            let ticket = extractTicket(from: mr)
+            let ticket = extractTicket(from: mr, prefix: ticketPrefix)
             let createdLabel = "Créée : \(ageLabel(since: mr.createdAt, now: now))"
             let dateLabel: String
             if let mergedAt = mr.mergedAt {
@@ -537,6 +559,7 @@ func buildMergedRows(
                 key: key,
                 iidLabel: "!\(mr.iid)",
                 displayTitle: stripRedundantTicketSuffix(from: mr.title, ticket: ticket),
+                ticket: ticket,
                 jira: jiraStatuses[key].map { jiraStatusDisplay(for: $0, isOpen: false) },
                 dateLabel: dateLabel,
                 webUrl: mr.webUrl

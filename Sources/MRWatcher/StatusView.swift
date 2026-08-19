@@ -69,6 +69,16 @@ struct StatusView: View {
         chipCounts(for: [.needsRevisit], mrs: mrs, approvals: statuses, jiraStatuses: store.jiraStatuses)[.needsRevisit] ?? 0
     }
 
+    /// Condition d'affichage de `jiraConfigWarning` : au moins un ticket détecté
+    /// quelque part dans l'app. L'en-tête est partagé par les trois onglets, donc on
+    /// regarde les trois sources plutôt que la seule liste active — sinon le bandeau
+    /// apparaîtrait/disparaîtrait au changement d'onglet pour un même réglage.
+    private var hasAnyDetectedTicket: Bool {
+        let ticketPrefix = ConfigManager.shared.ticketPrefix
+        return (store.mrs + store.reviewedMRs + store.reviewableMRs)
+            .contains { detectedTicket(in: $0, prefix: ticketPrefix) != nil }
+    }
+
     private var appVersion: String {
         guard let version = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -108,6 +118,8 @@ struct StatusView: View {
             syncStatus
 
             jiraWarning
+
+            jiraConfigWarning
 
             Spacer()
 
@@ -183,6 +195,33 @@ struct StatusView: View {
         }
     }
 
+    /// Réservé aux utilisateurs qui avaient un lien Jira codé en dur avant que l'URL
+    /// devienne configurable (dé-hardcoding de l'employeur, cf. `jiraBaseURL`) : sans
+    /// ce bandeau, un ticket devient gris et non cliquable sans aucune explication à
+    /// l'écran — les notes de version ne suffisent pas, personne ne les lit.
+    @ViewBuilder
+    private var jiraConfigWarning: some View {
+        if ConfigManager.shared.jiraBaseURL.isEmpty && hasAnyDetectedTicket {
+            Button {
+                setupController.open(store: store, scheduler: scheduler)
+            } label: {
+                Label("URL Jira non configurée", systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .help(Self.jiraConfigWarningTooltip)
+            .immediateTooltip(Self.jiraConfigWarningTooltip)
+            .accessibilityLabel(
+                "URL Jira non configurée. \(Self.jiraConfigWarningTooltip) Cliquer pour ouvrir les réglages."
+            )
+        }
+    }
+
+    private static let jiraConfigWarningTooltip =
+        "Les tickets ne sont pas cliquables tant que l'URL de votre instance Jira n'est pas renseignée. Réglages → Jira."
+
     private var settingsMenu: some View {
         Menu {
             Button("Configurer...") {
@@ -254,6 +293,7 @@ struct StatusView: View {
         } else {
             let now = Date()
             let lookup = mrLookup
+            let ticketPrefix = ConfigManager.shared.ticketPrefix
             ScrollView {
                 StatusTableView(
                     layout: .author,
@@ -271,10 +311,17 @@ struct StatusView: View {
                             )
                         },
                         context: .author,
+                        ticketPrefix: ticketPrefix,
                         now: now
                     ),
-                    mergedRows: buildMergedRows(mrs: store.mrs, jiraStatuses: store.jiraStatuses, now: now),
+                    mergedRows: buildMergedRows(
+                        mrs: store.mrs,
+                        jiraStatuses: store.jiraStatuses,
+                        ticketPrefix: ticketPrefix,
+                        now: now
+                    ),
                     mrLookup: lookup,
+                    jiraBaseURL: ConfigManager.shared.jiraBaseURL,
                     refreshingKeys: store.refreshingMRKeys,
                     manualActions: manualActionsByKey,
                     launchingJobIds: store.launchingManualPipelineJobIds,
@@ -377,6 +424,7 @@ struct StatusView: View {
     ) -> some View {
         let now = Date()
         let rowLookup = lookup(from: mrs)
+        let ticketPrefix = ConfigManager.shared.ticketPrefix
         let filteredMRs = mrs.filter { mr in
             let key = MRKey(projectId: mr.projectId, iid: mr.iid)
             return matchesChip(selection.wrappedValue, approvals: statuses[key], jiraStatus: store.jiraStatuses[key])
@@ -403,10 +451,12 @@ struct StatusView: View {
                             )
                         },
                         context: .reviewer,
+                        ticketPrefix: ticketPrefix,
                         now: now
                     ),
                     mergedRows: [],
                     mrLookup: rowLookup,
+                    jiraBaseURL: ConfigManager.shared.jiraBaseURL,
                     refreshingKeys: store.refreshingMRKeys,
                     manualActions: manualActionsByKey,
                     launchingJobIds: store.launchingManualPipelineJobIds,

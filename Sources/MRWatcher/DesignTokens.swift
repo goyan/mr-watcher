@@ -43,7 +43,12 @@ enum DesignTokens {
 /// Largeurs de colonnes de la table « Mes MRs », partagées entre l'en-tête et les
 /// lignes — c'est ce qui garantit l'alignement vertical entre les deux.
 enum StatusColumn {
-    static let mr: CGFloat = 92
+    // 56 pt : mesuré à l'écran (`!57008` = 45×15 pt) + marge pour un IID à 6 chiffres —
+    // le ticket a rejoint le tag Jira en ligne 2 du Titre, la cellule MR ne porte plus
+    // qu'`!IID` seul (correctif ergonomie : deux liens empilés dans 92 pt en laissaient
+    // la moitié inutilisée). La largeur libérée revient à la colonne Titre (`Spacer`
+    // après elle) ; `minimumTableWidth` baisse d'autant, calculé, pas recopié à la main.
+    static let mr: CGFloat = 56
     static let titleMinWidth: CGFloat = 280
     static let state: CGFloat = 128
     static let threads: CGFloat = 44
@@ -69,7 +74,7 @@ enum StatusColumn {
 /// Largeurs de colonnes de la ligne mergée simplifiée (pas de rail, pas d'en-tête
 /// dédié — cf. maquette étape 0, section « Récemment mergées »).
 enum MergedColumn {
-    static let mr: CGFloat = 92
+    static let mr: CGFloat = 56
     static let titleMinWidth: CGFloat = 280
     static let jira: CGFloat = 128
     static let actions: CGFloat = 30
@@ -85,7 +90,7 @@ enum ReviewColumn {
     // Implication avaient une marge inutilisée (contenu réel ≤ 62 pt et ≤ 90 pt) —
     // récupérée pour financer une colonne Actions qui ne tronque plus le seul bouton
     // à libellé sur une ligne à 5 slots (↻ + ▶ + ✦ + Approuver + ✕ ≈ 212 hors marges).
-    static let mr: CGFloat = 65
+    static let mr: CGFloat = 56
     static let titleMinWidth: CGFloat = 240
     static let author: CGFloat = 92
     static let state: CGFloat = 132
