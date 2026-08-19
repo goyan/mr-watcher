@@ -7,12 +7,12 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>MR Watcher application updates</description>
     <language>fr</language>
     <item>
-      <title>Version 0.5.11</title>
-      <pubDate>Wed, 19 Aug 2026 13:18:15 +0200</pubDate>
-      <enclosure url="https://github.com/goyan/mr-watcher/releases/download/v0.5.11/MRWatcher-v0.5.11.zip" sparkle:version="0.5.11" sparkle:shortVersionString="0.5.11" sparkle:edSignature="GMRCTgn8b7mc6D49p4MZaUpec9AaC8RdufPhFTDk1LSuYvvb5bbPw43c86n46ZAG2rTjPF1TcNyKU1SuKfIhDg==" length="1928220" type="application/octet-stream"></enclosure>
+      <title>Version 0.5.12</title>
+      <pubDate>Wed, 19 Aug 2026 13:41:03 +0200</pubDate>
+      <enclosure url="https://github.com/goyan/mr-watcher/releases/download/v0.5.12/MRWatcher-v0.5.12.zip" sparkle:version="0.5.12" sparkle:shortVersionString="0.5.12" sparkle:edSignature="Q2wyNdpyYjhtqzJTrUdDsXUyQWxx45DkPvhUwvL2/Kt9xjYtMK+QE8tCGRMDb2N2uyr7lXkHyqZPe3STyHuNCQ==" length="1928703" type="application/octet-stream"></enclosure>
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: Eaov7sPOV9eafnBnnEN0tDh/TjWfGNgdwgX89yO7kh+Btcj0ekL3NIY6akpYj5Opi7y5MuRE3e0r2aTnyYVgCA==
+edSignature: JblMnNvOxqgLO2+wjxZ90Zd9E1gE9aTfO/J8AlXNYO4M1wPgaL9mNioYFhromph93xWsPasiGj9MNm8d203BDA==
 length: 1048
 -->
