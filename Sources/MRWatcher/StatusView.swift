@@ -15,7 +15,7 @@ struct StatusView: View {
     let setupController: SetupWindowController
     let updaterController: UpdaterController
 
-    @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 60
+    @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 600
     @State private var contentTab: ContentTab = .myMRs
     @State private var hoveredAction: MRKey?
     @State private var hoveredPersonalThread: MRKey?
@@ -79,6 +79,8 @@ struct StatusView: View {
 
             syncStatus
 
+            jiraWarning
+
             Spacer()
 
             Button {
@@ -93,6 +95,7 @@ struct StatusView: View {
             }
             .buttonStyle(.borderless)
             .help("Actualiser maintenant")
+            .immediateTooltip("Actualiser maintenant")
             .disabled(store.isLoading || !store.isConfigured)
 
             settingsMenu
@@ -139,6 +142,19 @@ struct StatusView: View {
         }
     }
 
+    @ViewBuilder
+    private var jiraWarning: some View {
+        if let error = store.jiraError {
+            Label("Jira indisponible", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+                .help(error)
+                .immediateTooltip(error)
+                .accessibilityLabel("Jira indisponible : \(error)")
+        }
+    }
+
     private var settingsMenu: some View {
         Menu {
             Button("Configurer...") {
@@ -146,7 +162,7 @@ struct StatusView: View {
             }
 
             Menu("Intervalle d'actualisation") {
-                ForEach([15, 30, 60, 120, 300, 600], id: \.self) { seconds in
+                ForEach([15, 30, 60, 120, 300, 600, 3_600, 14_400, 28_800, 86_400, 0], id: \.self) { seconds in
                     Button {
                         pollIntervalSeconds = seconds
                         scheduler.restart()
@@ -174,6 +190,7 @@ struct StatusView: View {
         }
         .menuStyle(.borderlessButton)
         .help("Réglages")
+        .immediateTooltip("Réglages")
     }
 
     @ViewBuilder
@@ -262,16 +279,16 @@ struct StatusView: View {
             ContentUnavailableView(
                 "Configuration GitLab requise",
                 systemImage: "arrow.triangle.branch",
-                description: Text("Configurez GitLab pour afficher les MRs Indigo à revoir.")
+                description: Text("Configurez GitLab pour afficher les MRs portant les labels configurés.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.reviewableMRs.isEmpty && store.isLoading && store.lastSuccessfulPollAt == nil {
             loadingState
         } else if store.reviewableMRs.isEmpty {
             ContentUnavailableView(
-                "Aucune MR Indigo à revoir",
+                "Aucune MR à revoir",
                 systemImage: "eye",
-                description: Text("Les MRs Indigo ouvertes apparaîtront ici.")
+                description: Text("Les MRs ouvertes portant les labels configurés apparaîtront ici.")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -401,7 +418,7 @@ struct StatusView: View {
                     Text("\(store.reviewedMRs.count) revue\(store.reviewedMRs.count == 1 ? "" : "s") en cours")
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("\(store.reviewableMRs.count) MR\(store.reviewableMRs.count == 1 ? "" : "s") Indigo")
+                    Text("\(store.reviewableMRs.count) MR\(store.reviewableMRs.count == 1 ? "" : "s") à revoir")
                         .foregroundStyle(.secondary)
                     Text("·")
                         .foregroundStyle(.tertiary)
@@ -430,11 +447,16 @@ struct StatusView: View {
                 }
                 .buttonStyle(.plain)
                 .font(.callout)
-                .help("Mise à jour disponible — cliquer pour installer")
+                .help("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
+                .immediateTooltip("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
+                .accessibilityLabel("Version \(appVersion). Mise à jour disponible.")
             } else {
                 Text(appVersion)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .help(ReleaseNotes.summary)
+                    .immediateTooltip(ReleaseNotes.summary)
+                    .accessibilityLabel("Version \(appVersion). \(ReleaseNotes.summary)")
             }
             Text("·")
                 .foregroundStyle(.tertiary)
@@ -471,6 +493,7 @@ struct StatusView: View {
                         }
                         .buttonStyle(.plain)
                         .help("Ouvrir !\(mr.iid) dans GitLab")
+                        .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
                         .accessibilityLabel(mrAccessibilityLabel(for: mr))
 
                         if let ticket = ticket(for: mr) {
@@ -483,6 +506,7 @@ struct StatusView: View {
                             }
                             .buttonStyle(.plain)
                             .help("Ouvrir \(ticket) dans Jira")
+                            .immediateTooltip("Ouvrir \(ticket) dans Jira")
                             .accessibilityLabel("Ouvrir \(ticket) dans Jira")
                         }
                     }
@@ -502,6 +526,7 @@ struct StatusView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Ouvrir !\(mr.iid) dans GitLab")
+                    .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
                     .accessibilityLabel(mrAccessibilityLabel(for: mr))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -536,39 +561,61 @@ struct StatusView: View {
         let key = MRKey(projectId: mr.projectId, iid: mr.iid)
         return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 10) {
-                Button {
-                    openURL(mr.webUrl)
-                } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 8) {
-                            Text("!\(mr.iid)")
-                                .fontWeight(.semibold)
-                            if let author = mr.author {
-                                Text(author.shortDisplayName)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Button {
+                            openURL(mr.webUrl)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("!\(mr.iid)")
                                     .fontWeight(.semibold)
-                                    .help("Auteur : \(author.fullDescription)")
+                                if let author = mr.author {
+                                    Text(author.shortDisplayName)
+                                        .fontWeight(.semibold)
+                                        .help("Auteur : \(author.fullDescription)")
+                                }
+                                Text("[\(projectName(for: mr))]")
                             }
-                            Text("[\(projectName(for: mr))]")
-                            if let ticket = ticket(for: mr) {
+                            .font(.system(.callout, design: .monospaced))
+                            .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Ouvrir !\(mr.iid) dans GitLab")
+                        .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
+                        .accessibilityLabel(reviewAccessibilityLabel(for: mr))
+
+                        if let ticket = ticket(for: mr) {
+                            Button {
+                                openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
+                            } label: {
                                 Text(ticket)
+                                    .font(.system(.callout, design: .monospaced))
                                     .foregroundStyle(.blue)
                             }
+                            .buttonStyle(.plain)
+                            .help("Ouvrir \(ticket) dans Jira")
+                            .immediateTooltip("Ouvrir \(ticket) dans Jira")
+                            .accessibilityLabel("Ouvrir \(ticket) dans Jira")
                         }
-                        .font(.system(.callout, design: .monospaced))
-                        .lineLimit(1)
+                    }
 
+                    Button {
+                        openURL(mr.webUrl)
+                    } label: {
                         Text(mr.title)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .help("Ouvrir !\(mr.iid) dans GitLab")
+                    .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
+                    .accessibilityLabel(reviewAccessibilityLabel(for: mr))
                 }
-                .buttonStyle(.plain)
-                .help("Ouvrir !\(mr.iid) dans GitLab")
-                .accessibilityLabel(reviewAccessibilityLabel(for: mr))
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
                     refreshButton(for: mr, key: key)
@@ -692,6 +739,7 @@ struct StatusView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.orange)
             .help("Ouvrir votre premier fil non resolu dans GitLab")
+            .immediateTooltip("Ouvrir votre premier fil non resolu dans GitLab")
             .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non resolus dans GitLab")
             .onHover { isHovering in
                 hoveredPersonalThread = isHovering ? key : nil
@@ -725,6 +773,7 @@ struct StatusView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.orange)
             .help("Ouvrir le premier fil non resolu des autres dans GitLab")
+            .immediateTooltip("Ouvrir le premier fil non resolu des autres dans GitLab")
             .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non resolus des autres dans GitLab")
             .onHover { isHovering in
                 hoveredOtherThread = isHovering ? key : nil
@@ -752,6 +801,7 @@ struct StatusView: View {
             .controlSize(.small)
             .disabled(store.isLoading)
             .help("Approuver !\(mr.iid) dans GitLab")
+            .immediateTooltip("Approuver !\(mr.iid) dans GitLab")
             .accessibilityLabel("Approuver la merge request !\(mr.iid) dans GitLab")
         }
     }
@@ -785,6 +835,7 @@ struct StatusView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 4))
                 .foregroundStyle(.secondary)
                 .help("Masquer !\(mr.iid) de mes revues")
+                .immediateTooltip("Masquer !\(mr.iid) de mes revues")
                 .accessibilityLabel("Masquer la merge request !\(mr.iid) de mes revues")
                 .onHover { isHovering in
                     hoveredReviewDismissal = isHovering ? key : nil
@@ -814,6 +865,7 @@ struct StatusView: View {
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 4))
         .help("Actualiser !\(mr.iid)")
+        .immediateTooltip("Actualiser !\(mr.iid)")
         .accessibilityLabel("Actualiser la merge request !\(mr.iid)")
         .disabled(store.refreshingMRKeys.contains(key) || !store.isConfigured)
     }
@@ -859,6 +911,7 @@ struct StatusView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("\(action.kind.title) pour !\(mr.iid)")
+                .immediateTooltip("\(action.kind.title) pour !\(mr.iid)")
                 .accessibilityLabel("\(action.kind.title) pour la merge request !\(mr.iid)")
             }
         }
@@ -904,6 +957,7 @@ struct StatusView: View {
                 isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
             }
             .help("Retirer !\(mr.iid) de la liste")
+            .immediateTooltip("Retirer !\(mr.iid) de la liste")
         } else if let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
             Button {
                 confirmRebase(for: mr)
@@ -923,6 +977,7 @@ struct StatusView: View {
                 isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
             }
             .help("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
+            .immediateTooltip("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
         }
     }
 
@@ -1059,6 +1114,7 @@ struct StatusView: View {
             }
             .buttonStyle(.plain)
             .help("Ouvrir \(ticket) dans Jira")
+            .immediateTooltip("Ouvrir \(ticket) dans Jira")
         } else {
             Label(jira.name, systemImage: jiraSymbol(jira, isOpen: isOpen))
                 .foregroundStyle(jiraColor(jira, isOpen: isOpen))
@@ -1123,7 +1179,20 @@ struct StatusView: View {
     }
 
     private func intervalDescription(_ seconds: Int) -> String {
-        seconds < 60 ? "\(seconds) s" : "\(seconds / 60) min"
+        switch seconds {
+        case 0:
+            "Jamais"
+        case 3_600:
+            "1 h"
+        case 14_400:
+            "4 h"
+        case 28_800:
+            "8 h"
+        case 86_400:
+            "24 h"
+        default:
+            seconds < 60 ? "\(seconds) s" : "\(seconds / 60) min"
+        }
     }
 
     private func openURL(_ urlString: String) {

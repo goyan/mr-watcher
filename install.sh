@@ -76,6 +76,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 cp .build/release/MRWatcher "$APP_DIR/MRWatcher"
 ditto "$SPARKLE_FRAMEWORK_SOURCE" "$FRAMEWORKS_DIR/Sparkle.framework"
+cp RELEASE_NOTES.md "$RESOURCES_DIR/RELEASE_NOTES.md"
 
 if [[ ! -f "$ICON_SOURCE" ]]; then
   echo "Icône introuvable : $ICON_SOURCE" >&2

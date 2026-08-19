@@ -157,7 +157,7 @@
 | Navigation de thread | ✅ boutons « Mes fils » et « autres » avec survol, ouvrent l'ancre GitLab du premier fil non résolu correspondant |
 | Cycle de vie des revues | ✅ suppression automatique si tous les commentaires personnels sont supprimés, croix de masquage persistante |
 | Approbation | ✅ statut `Approved` vert après approbation personnelle |
-| File à revoir | ✅ onglet `À revoir` pour les MRs `Indigo`/`indigo` ouvertes, non-Draft, d'autres auteurs |
+| File à revoir | ✅ onglet `À revoir` pour les MRs `Indigo`/`indigo` ouvertes, non-Draft, d'autres auteurs, hors tickets Jira abandonnés |
 | Priorisation Jira | ✅ groupes `To Review` puis `Les autres` dans les onglets de revue, avec statut texte visible |
 | Enrichissement Jira différé | ✅ données GitLab publiées immédiatement ; les statuts Jira reclassent les listes à leur arrivée, avec rejet des réponses périmées |
 | Cohérence des vues | ✅ cartes « Mes MRs » alignées sur les revues ; pied « À revoir » détaille total Indigo, `To Review` et `Les autres` |
@@ -167,5 +167,11 @@
 | Validation technique | ✅ `swift build -c release` et `swift test` (5 tests), application installée et 6 revues réelles visibles dans les deux vues |
 | Actions ciblées | ✅ bouton de rafraîchissement individuel sur chaque MR, avec chargement local sans cycle global |
 | Approbation « À revoir » | ✅ action GitLab disponible selon les mêmes critères d’éligibilité que « Mes revues », sans action de masquage |
+| Dégradation Jira | ✅ échec `acli` visible dans les deux barres de statut, détail assaini au survol, sans bloquer GitLab |
+| Labels de revue | ✅ labels GitLab configurables dans Réglages, persistés localement et utilisés par « À revoir » |
+| Notes de release | ✅ résumé embarqué dans le bundle, visible au survol de la version dans les deux vues |
+| Tooltips d'action | ✅ overlays SwiftUI immédiats au-dessus des actions dans les deux vues, avec `.help` conservé en repli |
 | Actions pipeline | ✅ lancement des jobs manuels `build affected` et `auto review`, avec pagination, annulation et garde de pipeline courant |
 | Garde d'approbation | ✅ approbation après tests vérifiés/verts ; auto review indépendante dès que son job est manuel |
+| Tooltips | ✅ panels AppKit immédiats, ancrés aux contrôles, non rognés et non interactifs (le premier clic reste disponible) |
+| Polling | ✅ défaut 10 min ; options jusqu'à 24 h et « Jamais » (0 persistant), sans répétition automatique |

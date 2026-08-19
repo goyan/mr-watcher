@@ -4,11 +4,19 @@ macOS menu bar app pour surveiller ses MRs GitLab en un coup d'œil, accessible 
 
 ## Ce que ça fait
 
-Pour chaque MR ouverte, affiche en temps réel :
+MR Watcher propose trois vues, dans la fenêtre principale comme dans le panneau de
+barre de menus :
 
-```
-!56805  [millenium]  PROD-30914  ✅  ⬇74  ✅2/2  5j  [🟡 à tester]
-```
+- **Mes MRs** : vos MRs ouvertes et récemment mergées.
+- **Mes revues** : les MRs ouvertes sur lesquelles vous avez commenté.
+- **À revoir** : les MRs ouvertes, non-Draft, d'autres auteurs, correspondant aux
+  labels GitLab configurés, hors tickets Jira abandonnés.
+
+Les vues de revue sont regroupées par statut Jira : **To Review** (inclut
+`Code review`) puis **Les autres**. Jira enrichit les données après le premier
+affichage GitLab afin de ne pas bloquer l'interface.
+
+Chaque ligne affiche :
 
 | Indicateur | Signification |
 |------------|---------------|
@@ -25,11 +33,29 @@ Pour chaque MR ouverte, affiche en temps réel :
 
 ### Actions
 
+- **↻ Actualiser la MR** — met à jour uniquement la MR, ses discussions,
+  approbations, CI, conflits, retard et statut Jira.
+- **`Mes fils` / `autres`** — ouvre le premier thread non résolu correspondant
+  directement dans GitLab.
+- **Approuver** — disponible pour une MR ouverte, non-Draft, non déjà
+  approuvée, sans fil personnel ouvert et seulement après vérification que
+  `build affected` est vert.
+- **Lancer les tests** — disponible lorsque le job manuel GitLab
+  `build affected` peut être joué.
+- **Lancer l'auto review** — disponible indépendamment des tests lorsque son
+  propre job GitLab est manuel.
 - **↩ /rebase (N commits)** — rebase via quick action GitLab (préserve les approbations), déclenche automatiquement le job `build affected`
 - **✕ Retirer** — retire une MR mergée de la liste
+- **✕ Masquer** — retire durablement une MR de **Mes revues**.
 - **⚙️ Configurer…** — ouvre le panneau de configuration
-- **⚙️ Intervalle d'actualisation** — choisit la période de poll (15 s à 10 min), redémarre le scheduler
+- **⚙️ Labels à surveiller** — configure les labels GitLab de la file
+  **À revoir** (par défaut : `Indigo, indigo`).
+- **⚙️ Intervalle d'actualisation** — choisit la période de poll de 15 s à
+  24 h, ou **Jamais** ; l'actualisation manuelle reste toujours disponible.
 - **Rechercher les mises à jour…** — vérifie et installe une release Sparkle signée
+
+Les actions affichent un tooltip immédiat au survol. Les notes de la release
+installée sont disponibles au survol de son numéro de version.
 
 ### Notifications macOS
 
@@ -85,6 +111,10 @@ reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.0.zi
 dans la release GitHub `v0.5.0`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
 disponible. Le ZIP et le feed doivent rester inchangés après signature.
 
+Les notes de release sont maintenues dans `RELEASE_NOTES.md`, embarquées dans
+l'application et publiées avec la release GitHub. Elles doivent décrire les
+rubriques **Ajouts**, **Corrections** et **Validation** de la version concernée.
+
 Le ZIP Sparkle signé est le canal de mise à jour recommandé. Sans certificat Developer ID ni
 notarisation, le DMG public reste un installeur manuel sans authentification de l'éditeur : une
 substitution avant la première installation ne peut pas être détectée de manière fiable. Gatekeeper
@@ -130,23 +160,32 @@ Variables lues depuis `~/.env` :
 | `GITLAB_HOST` | Host GitLab (ex: `gitlab.factory.fonciamillenium.net`) |
 | `GITLAB_USERNAME` | Username GitLab (ex: `herve.meunier.externe`) |
 
-Le statut Jira est récupéré via `acli` (Atlassian CLI) — aucune configuration supplémentaire si `acli` est déjà authentifié.
+Le statut Jira est récupéré via `acli` (Atlassian CLI) — aucune configuration supplémentaire si `acli` est déjà authentifié. Si l'outil est absent ou échoue, GitLab continue de fonctionner et l'application affiche `Jira indisponible`; le détail assaini est disponible au survol.
+
+Les labels de **À revoir** sont enregistrés localement depuis **⚙️ → Configurer…**.
+Les valeurs sont séparées par des virgules ou des retours à la ligne et la casse
+est conservée, car GitLab distingue les labels `Indigo` et `indigo`.
 
 ## Intervalle de poll
 
-Par défaut 60 secondes. Réglable depuis la fenêtre principale : **⚙️ → Intervalle d'actualisation**
-(15 s · 30 s · 1 min · 2 min · 5 min · 10 min). Le choix est persisté dans `UserDefaults` et le
-scheduler redémarre immédiatement.
+Par défaut 10 minutes. Réglable depuis la fenêtre principale ou le panneau de
+barre de menus : **⚙️ → Intervalle d'actualisation**
+(`15 s` · `30 s` · `1 min` · `2 min` · `5 min` · `10 min` · `1 h` · `4 h` ·
+`8 h` · `24 h` · `Jamais`). Le choix est persisté dans `UserDefaults`.
+
+**Jamais** désactive les répétitions automatiques. L'application effectue tout
+de même son premier chargement au démarrage et les boutons d'actualisation
+manuelle restent disponibles.
 
 Équivalent en ligne de commande — l'intervalle est relu à chaque cycle, la nouvelle valeur
 s'applique donc dès le poll suivant :
 
 ```bash
-defaults write MRWatcher pollIntervalSeconds 30
+defaults write com.goyan.mrwatcher pollIntervalSeconds 600
 ```
 
-Le plancher est de 15 secondes : toute valeur inférieure est ramenée à 15, et `0` (clé absente)
-retombe sur 60.
+Le plancher est de 15 secondes : toute valeur positive inférieure est ramenée à
+15. La valeur `0` signifie **Jamais**; une clé absente utilise 600 secondes.
 
 ## Stack
 

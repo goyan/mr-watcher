@@ -42,7 +42,7 @@ struct MenuBarView: View {
     let updaterController: UpdaterController
     let onClearEvents: () -> Void
 
-    @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 60
+    @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 600
     @State private var displayScope: DisplayScope = .needsAttention
     @State private var eventsExpanded = true
     @State private var mergedExpanded = false
@@ -110,6 +110,8 @@ struct MenuBarView: View {
             syncStatus
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            jiraWarning
+
             Button {
                 Task { await scheduler.pollNow() }
             } label: {
@@ -124,6 +126,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help("Actualiser maintenant")
+            .immediateTooltip("Actualiser maintenant")
             .accessibilityLabel("Actualiser les merge requests")
             .disabled(store.isLoading || !store.isConfigured)
         }
@@ -157,6 +160,19 @@ struct MenuBarView: View {
             Text("En attente de synchronisation")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var jiraWarning: some View {
+        if let error = store.jiraError {
+            Label("Jira indisponible", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+                .help(error)
+                .immediateTooltip(error)
+                .accessibilityLabel("Jira indisponible : \(error)")
         }
     }
 
@@ -293,7 +309,7 @@ struct MenuBarView: View {
     @ViewBuilder
     private var reviewableContent: some View {
         if store.reviewableMRs.isEmpty {
-            emptyState(title: "Aucune MR Indigo à revoir", symbol: "eye")
+            emptyState(title: "Aucune MR à revoir", symbol: "eye")
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 reviewSections(
@@ -436,6 +452,7 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(mrAccessibilityLabel(for: mr))
                 .help("Ouvrir !\(mr.iid) dans GitLab")
+                .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
 
                 metadataRow(for: mr)
             }
@@ -500,6 +517,7 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(reviewAccessibilityLabel(for: mr))
                 .help("Ouvrir !\(mr.iid) dans GitLab")
+                .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
 
                 reviewMetadataRow(for: mr, key: key, statuses: statuses)
             }
@@ -540,6 +558,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .foregroundStyle(jiraColor(for: mr))
             .help("Ouvrir \(ticket) dans Jira")
+            .immediateTooltip("Ouvrir \(ticket) dans Jira")
             .accessibilityLabel("Ouvrir le ticket \(ticket) dans Jira")
         }
     }
@@ -647,6 +666,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.orange)
             .help("Ouvrir votre premier fil non resolu dans GitLab")
+            .immediateTooltip("Ouvrir votre premier fil non resolu dans GitLab")
             .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non resolus dans GitLab")
             .onHover { isHovering in
                 hoveredPersonalThread = isHovering ? key : nil
@@ -680,6 +700,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.orange)
             .help("Ouvrir le premier fil non resolu des autres dans GitLab")
+            .immediateTooltip("Ouvrir le premier fil non resolu des autres dans GitLab")
             .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non resolus des autres dans GitLab")
             .onHover { isHovering in
                 hoveredOtherThread = isHovering ? key : nil
@@ -759,6 +780,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Retirer !\(mr.iid) de la liste")
+            .immediateTooltip("Retirer !\(mr.iid) de la liste")
             .accessibilityLabel("Retirer la merge request !\(mr.iid)")
             .onHover { isHovering in
                 hoveredAction = isHovering ? key : nil
@@ -778,6 +800,7 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.orange)
             .help("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
+            .immediateTooltip("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
             .accessibilityLabel("Lancer le rebase de la merge request !\(mr.iid)")
             .onHover { isHovering in
                 hoveredAction = isHovering ? key : nil
@@ -807,6 +830,7 @@ struct MenuBarView: View {
             .foregroundStyle(.green)
             .disabled(store.isLoading)
             .help("Approuver !\(mr.iid) dans GitLab")
+            .immediateTooltip("Approuver !\(mr.iid) dans GitLab")
             .accessibilityLabel("Approuver la merge request !\(mr.iid) dans GitLab")
             .onHover { isHovering in
                 hoveredAction = isHovering ? key : nil
@@ -840,6 +864,7 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .help("Masquer !\(mr.iid) de mes revues")
+                .immediateTooltip("Masquer !\(mr.iid) de mes revues")
                 .accessibilityLabel("Masquer la merge request !\(mr.iid) de mes revues")
                 .onHover { isHovering in
                     hoveredReviewDismissal = isHovering ? key : nil
@@ -867,6 +892,7 @@ struct MenuBarView: View {
         }
         .buttonStyle(.plain)
         .help("Actualiser !\(mr.iid)")
+        .immediateTooltip("Actualiser !\(mr.iid)")
         .accessibilityLabel("Actualiser la merge request !\(mr.iid)")
         .disabled(store.refreshingMRKeys.contains(key) || !store.isConfigured)
     }
@@ -912,6 +938,7 @@ struct MenuBarView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .help("\(action.kind.title) pour !\(mr.iid)")
+                .immediateTooltip("\(action.kind.title) pour !\(mr.iid)")
                 .accessibilityLabel("\(action.kind.title) pour la merge request !\(mr.iid)")
             }
         }
@@ -944,6 +971,7 @@ struct MenuBarView: View {
                         }
                         .buttonStyle(.plain)
                         .help("Ouvrir l'événement de !\(event.mrIid)")
+                        .immediateTooltip("Ouvrir l'événement de !\(event.mrIid)")
                     }
 
                     Button(role: .destructive) {
@@ -954,6 +982,8 @@ struct MenuBarView: View {
                             .font(.caption)
                     }
                     .buttonStyle(.plain)
+                    .help("Effacer les événements")
+                    .immediateTooltip("Effacer les événements")
                     .padding(.top, 2)
                 }
                 .padding(.top, 6)
@@ -975,6 +1005,9 @@ struct MenuBarView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .help(ReleaseNotes.summary)
+                .immediateTooltip(ReleaseNotes.summary)
+                .accessibilityLabel("Version \(appVersion). \(ReleaseNotes.summary)")
 
             if updaterController.updateAvailable {
                 Button {
@@ -984,7 +1017,8 @@ struct MenuBarView: View {
                         .foregroundStyle(.orange)
                 }
                 .buttonStyle(.plain)
-                .help("Mise à jour disponible")
+                .help("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
+                .immediateTooltip("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
                 .accessibilityLabel("Installer la mise à jour disponible")
             }
 
@@ -998,6 +1032,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help("Quitter MR Watcher")
+            .immediateTooltip("Quitter MR Watcher")
             .accessibilityLabel("Quitter MR Watcher")
         }
         .padding(.horizontal, 12)
@@ -1011,7 +1046,7 @@ struct MenuBarView: View {
             }
 
             Menu("Intervalle d'actualisation") {
-                ForEach([15, 30, 60, 120, 300, 600], id: \.self) { seconds in
+                ForEach([15, 30, 60, 120, 300, 600, 3_600, 14_400, 28_800, 86_400, 0], id: \.self) { seconds in
                     Button {
                         pollIntervalSeconds = seconds
                         scheduler.restart()
@@ -1036,6 +1071,7 @@ struct MenuBarView: View {
         }
         .menuStyle(.borderlessButton)
         .help("Réglages")
+        .immediateTooltip("Réglages")
         .accessibilityLabel("Réglages de MR Watcher")
     }
 
@@ -1139,7 +1175,20 @@ struct MenuBarView: View {
     }
 
     private func intervalDescription(_ seconds: Int) -> String {
-        seconds < 60 ? "\(seconds) s" : "\(seconds / 60) min"
+        switch seconds {
+        case 0:
+            "Jamais"
+        case 3_600:
+            "1 h"
+        case 14_400:
+            "4 h"
+        case 28_800:
+            "8 h"
+        case 86_400:
+            "24 h"
+        default:
+            seconds < 60 ? "\(seconds) s" : "\(seconds / 60) min"
+        }
     }
 
     private func openURL(_ urlString: String) {

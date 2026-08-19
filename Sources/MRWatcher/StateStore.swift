@@ -53,6 +53,7 @@ final class StateStore {
     var isLoading: Bool = false
     var lastError: String? = nil
     var lastErrorIsAuth: Bool = false
+    var jiraError: String? = nil
     var lastSuccessfulPollAt: Date? = nil
     var dismissedKeys: Set<MRKey> = []
     var jiraStatuses: [MRKey: JiraIssueStatus] = [:]

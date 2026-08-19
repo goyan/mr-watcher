@@ -6,7 +6,9 @@ struct SetupView: View {
     @State private var pat: String = ""
     @State private var host: String = ConfigManager.shared.gitlabHost
     @State private var username: String = ConfigManager.shared.gitlabUsername ?? ""
+    @State private var reviewLabels: String = ConfigManager.shared.reviewLabelsInput
     @State private var saved = false
+    @State private var labelsSaved = false
     @State private var errorMsg: String? = nil
 
     var body: some View {
@@ -18,6 +20,22 @@ struct SetupView: View {
         TextField("GITLAB_HOST", text: $host)
 
         TextField("GITLAB_USERNAME", text: $username)
+
+        Divider()
+
+        Text("Labels à surveiller")
+            .font(.headline)
+
+        TextField("Indigo, indigo", text: $reviewLabels, axis: .vertical)
+            .lineLimit(1...3)
+            .onChange(of: reviewLabels) { _, _ in
+                labelsSaved = false
+            }
+
+        Button(labelsSaved ? "Labels sauvegardés" : "Sauvegarder les labels") {
+            saveReviewLabels()
+        }
+        .disabled(labelsSaved)
 
         if let err = errorMsg {
             Text("⚠️ \(err)").foregroundStyle(.red).font(.caption)
@@ -31,6 +49,13 @@ struct SetupView: View {
         if onDismiss != nil {
             Button("Annuler") { onDismiss?() }
         }
+    }
+
+    private func saveReviewLabels() {
+        ConfigManager.shared.saveReviewLabels(reviewLabels)
+        reviewLabels = ConfigManager.shared.reviewLabelsInput
+        labelsSaved = true
+        onSaved?()
     }
 
     private func save() {

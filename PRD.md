@@ -26,14 +26,17 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F13 | Onglet « Mes revues » : MRs ouvertes où l'utilisateur a commenté, avec auteur, statut Jira, CI, conflits, retard, approbations et threads personnels/autres | ✅ done |
 | F14 | Découverte des revues depuis les événements GitLab, conservation locale des MRs encore ouvertes et rafraîchissement borné par rotation | ✅ done |
 | F15 | Compteurs de threads personnels et externes actionnables : ouvrent directement le premier fil non résolu correspondant dans GitLab | ✅ done |
-| F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant le label `Indigo` ou `indigo` | ✅ done |
+| F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant le label `Indigo` ou `indigo`, hors tickets Jira abandonnés | ✅ done |
 | F17 | Priorisation des revues par statut Jira : sections `To Review` (`Code review` inclus) et `Les autres` | ✅ done |
 | F18 | Affichage GitLab immédiat des revues, puis enrichissement et regroupement Jira asynchrones | ✅ done |
 | F19 | Vue « Mes MRs » homogénéisée avec les cartes de revue, et total Indigo détaillé par statut Jira | ✅ done |
 | F20 | Chargement initial explicite, ticket Jira intégré aux métadonnées et auteur affiché en `Prénom N.`, y compris avec un pseudo GitLab technique | ✅ done |
 | F21 | Rafraîchissement individuel d'une MR, avec mise à jour GitLab puis Jira sans poll global | ✅ done |
-| F22 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
-| F23 | Approbation bloquée jusqu'aux tests `build affected` verts, auto review indépendante | ✅ done |
+| F22 | Avertissement non bloquant Jira/acli avec détail assaini au survol, et tooltips instantanés pour les actions et les notes de version | ✅ done |
+| F23 | Labels GitLab configurables pour alimenter « À revoir », avec repli `Indigo, indigo` | ✅ done |
+| F24 | Notes de version embarquées et visibles au survol de la version installée | ✅ done |
+| F25 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
+| F26 | Approbation bloquée jusqu'aux tests `build affected` verts, auto review indépendante | ✅ done |
 
 ### Actions
 
@@ -42,7 +45,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | A1 | Clic → ouvre la MR dans le navigateur | ✅ done |
 | A2 | `/rebase` via API GitLab (sans perdre les approbations) | ✅ done |
 | A3 | Rafraîchir manuellement | ✅ done |
-| A4 | Intervalle de poll réglable depuis l'UI (⚙️ → 15 s…10 min, redémarrage du scheduler) | ✅ done |
+| A4 | Intervalle de poll réglable depuis l'UI (⚙️ → 15 s…24 h ou Jamais, défaut 10 min, redémarrage du scheduler) | ✅ done |
 | A5 | Approbation manuelle GitLab dans « Mes revues » et « À revoir » lorsque les threads de l'utilisateur sont résolus | ✅ done |
 | A6 | Masquer durablement une MR revue depuis l'interface | ✅ done |
 | A7 | Lancer les jobs GitLab manuels `build affected` et `auto review` lorsqu'ils sont jouables | ✅ done |
@@ -64,7 +67,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | # | Feature | Statut |
 |---|---------|--------|
 | I1 | Auth : PAT depuis `~/.env` ou Keychain | ✅ done |
-| I2 | Poll toutes les 60s | ✅ done |
+| I2 | Poll configurable (défaut 10 min, désactivation persistante possible) | ✅ done |
 | I3 | Session URLSession ephémère (pas de cache disque du PAT) | ✅ done |
 | I4 | `@MainActor` isolation (pas de data race) | ✅ done |
 | I5 | `install.sh` + codesign ad-hoc | ✅ done |

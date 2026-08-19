@@ -24,8 +24,13 @@ final class PollingScheduler {
         let reviewedRefreshCursor: Int
     }
 
-    private var intervalSeconds: Int {
-        max(15, UserDefaults.standard.integer(forKey: "pollIntervalSeconds").atLeast(60))
+    private var intervalSeconds: Int? {
+        guard let storedInterval = UserDefaults.standard.object(
+            forKey: "pollIntervalSeconds"
+        ) as? Int else {
+            return 600
+        }
+        return storedInterval == 0 ? nil : max(15, storedInterval)
     }
 
     init(store: StateStore, gitlab: GitLabService, jira: JiraService) {
@@ -59,8 +64,10 @@ final class PollingScheduler {
                         self.reviewedRefreshCursor = result.reviewedRefreshCursor
                     }
                 }
-                let intervalSeconds = await MainActor.run {
+                guard let intervalSeconds = await MainActor.run(body: {
                     self.intervalSeconds
+                }) else {
+                    return
                 }
                 try? await Task.sleep(for: .seconds(Double(intervalSeconds)))
             }
@@ -75,7 +82,11 @@ final class PollingScheduler {
     }
 
     func restart() {
-        start()
+        if intervalSeconds == nil {
+            stop()
+        } else {
+            start()
+        }
     }
 
     func rebase(projectId: Int, mrIid: Int) async throws {
@@ -139,16 +150,33 @@ final class PollingScheduler {
     }
 
     private func refreshJiraStatus(for key: MRKey) async {
-        guard jira.isAvailable,
-              let mr = (store.mrs + store.reviewedMRs + store.reviewableMRs).first(where: {
-                  MRKey(projectId: $0.projectId, iid: $0.iid) == key
-              }),
-              let issueKey = extractProdTicket(from: mr),
-              let status = try? await jira.fetchIssueStatus(issueKey: issueKey),
-              store.isDisplayingMR(key: key) else {
+        let jiraPublicationToken = Self.latestJiraPublicationToken
+        guard jira.isAvailable else {
+            guard Self.latestJiraPublicationToken == jiraPublicationToken else { return }
+            store.jiraError = jira.availabilityErrorDescription
             return
         }
-        store.jiraStatuses[key] = status
+        guard let mr = (store.mrs + store.reviewedMRs + store.reviewableMRs).first(where: {
+                  MRKey(projectId: $0.projectId, iid: $0.iid) == key
+              }),
+              let issueKey = extractProdTicket(from: mr) else {
+            return
+        }
+        do {
+            let status = try await jira.fetchIssueStatus(issueKey: issueKey)
+            guard Self.latestJiraPublicationToken == jiraPublicationToken,
+                  store.isDisplayingMR(key: key) else {
+                return
+            }
+            store.jiraStatuses[key] = status
+            store.jiraError = nil
+        } catch {
+            guard Self.latestJiraPublicationToken == jiraPublicationToken,
+                  store.isDisplayingMR(key: key) else {
+                return
+            }
+            store.jiraError = "Jira \(issueKey) : \(jira.sanitizedErrorDescription(for: error))"
+        }
     }
 
     private func loadManualPipelineActions(for mr: MRSummary, key: MRKey) async {
@@ -444,11 +472,11 @@ final class PollingScheduler {
 
             var reviewableMRs = previousReviewableMRs
             var reviewableStatuses = previousReviewableStatuses
-            if let indigoMRs = try? await gitlab.fetchOpenIndigoMRs() {
+            if let labelMRs = try? await gitlab.fetchOpenReviewableMRs() {
                 let username = await MainActor.run {
                     ConfigManager.shared.gitlabUsername ?? ""
                 }
-                let candidates = indigoMRs.filter { mr in
+                let candidates = labelMRs.filter { mr in
                     guard !mr.isDraft,
                           !retainedReviewedKeys.contains(
                             MRKey(projectId: mr.projectId, iid: mr.iid)
@@ -533,6 +561,7 @@ final class PollingScheduler {
                 uniquingKeysWith: { latest, _ in latest }
             ).values
             var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
+            var jiraError: String?
             if jira.isAvailable {
                 for mr in jiraMRs {
                     if Task.isCancelled {
@@ -540,14 +569,39 @@ final class PollingScheduler {
                     }
                     guard let issueKey = extractProdTicket(from: mr) else { continue }
                     let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-                    if let status = try? await jira.fetchIssueStatus(issueKey: issueKey) {
+                    do {
+                        let status = try await jira.fetchIssueStatus(issueKey: issueKey)
                         newJiraStatuses[key] = status
+                    } catch {
+                        if jiraError == nil {
+                            jiraError = "Jira \(issueKey) : \(jira.sanitizedErrorDescription(for: error))"
+                        }
                     }
                 }
+            } else {
+                jiraError = jira.availabilityErrorDescription
             }
 
             await MainActor.run {
                 guard Self.latestJiraPublicationToken == jiraPublicationToken else { return }
+                store.jiraError = jiraError
+                let abandonedReviewableKeys = Set(
+                    store.reviewableMRs.compactMap { mr in
+                        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                        return newJiraStatuses[key].map(isAbandonedTicket) == true ? key : nil
+                    }
+                )
+                if !abandonedReviewableKeys.isEmpty {
+                    let remainingReviewableMRs = store.reviewableMRs.filter {
+                        !abandonedReviewableKeys.contains(
+                            MRKey(projectId: $0.projectId, iid: $0.iid)
+                        )
+                    }
+                    store.updateReviewableMRs(
+                        remainingReviewableMRs,
+                        statuses: store.reviewableStatuses
+                    )
+                }
                 let displayedKeys = Set(
                     (store.mrs + store.reviewedMRs + store.reviewableMRs).map {
                         MRKey(projectId: $0.projectId, iid: $0.iid)
@@ -579,4 +633,12 @@ private func extractProdTicket(from mr: MRSummary) -> String? {
         return String(s[range])
     }
     return find(in: mr.sourceBranch) ?? find(in: mr.title)
+}
+
+private func isAbandonedTicket(_ status: JiraIssueStatus) -> Bool {
+    let normalizedName = status.name
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+    return normalizedName.caseInsensitiveCompare("TICKET ABANDONNÉ") == .orderedSame
 }

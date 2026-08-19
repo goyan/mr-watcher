@@ -65,13 +65,20 @@ enum SecureDotEnvFile {
 @MainActor
 final class ConfigManager {
     static let shared = ConfigManager()
+    static let defaultReviewLabels = ["Indigo", "indigo"]
 
     private let keychainService = "mr-watcher"
     private let defaultHost = "gitlab.factory.fonciamillenium.net"
+    private let reviewLabelsDefaultsKey = "reviewLabels"
 
     private(set) var gitlabPAT: String?
     private(set) var gitlabHost: String = ""
     private(set) var gitlabUsername: String?
+    private(set) var reviewLabels: [String] = ConfigManager.defaultReviewLabels
+
+    var reviewLabelsInput: String {
+        reviewLabels.joined(separator: ", ")
+    }
 
     var isConfigured: Bool {
         gitlabPAT != nil && gitlabUsername != nil
@@ -87,6 +94,15 @@ final class ConfigManager {
         let rawHost = envValues["GITLAB_HOST"] ?? keychainValue(forKey: "GITLAB_HOST") ?? defaultHost
         gitlabHost = normalizeHost(rawHost)
         gitlabUsername = envValues["GITLAB_USERNAME"] ?? keychainValue(forKey: "GITLAB_USERNAME")
+        reviewLabels = normalizedReviewLabels(
+            from: UserDefaults.standard.string(forKey: reviewLabelsDefaultsKey) ?? ""
+        )
+    }
+
+    func saveReviewLabels(_ input: String) {
+        let labels = normalizedReviewLabels(from: input)
+        reviewLabels = labels
+        UserDefaults.standard.set(labels.joined(separator: ", "), forKey: reviewLabelsDefaultsKey)
     }
 
     private func normalizeHost(_ raw: String) -> String {
@@ -95,6 +111,17 @@ final class ConfigManager {
             if h.hasPrefix(prefix) { h = String(h.dropFirst(prefix.count)) }
         }
         return h.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    private func normalizedReviewLabels(from input: String) -> [String] {
+        let labels = input
+            .split(whereSeparator: { $0 == "," || $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var seen: Set<String> = []
+        let uniqueLabels = labels.filter { seen.insert($0).inserted }
+        return uniqueLabels.isEmpty ? Self.defaultReviewLabels : uniqueLabels
     }
 
     private func loadDotEnv() -> [String: String] {

@@ -267,14 +267,16 @@ final class GitLabService {
         return try decoder.decode([MRSummary].self, from: data)
     }
 
-    func fetchOpenIndigoMRs() async throws -> [MRSummary] {
-        let pat = await MainActor.run { config.gitlabPAT }
+    func fetchOpenReviewableMRs() async throws -> [MRSummary] {
+        let (pat, labels) = await MainActor.run {
+            (config.gitlabPAT, config.reviewLabels)
+        }
         guard let pat else { throw MRWatcherError.notConfigured }
         let host = await MainActor.run { config.gitlabHost }
 
         var seenKeys: Set<MRKey> = []
         var mrs: [MRSummary] = []
-        for label in ["Indigo", "indigo"] {
+        for label in labels {
             let url = try buildURL(host: host, path: "/api/v4/merge_requests", query: [
                 "scope": "all",
                 "state": "opened",

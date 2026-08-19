@@ -26,16 +26,17 @@ final class SetupWindowController: NSObject {
             }
         )
         let hosting = NSHostingController(rootView: content)
-        hosting.view.setFrameSize(NSSize(width: 380, height: 440))
+        let panelSize = NSSize(width: 420, height: 520)
+        hosting.view.setFrameSize(panelSize)
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 440),
+            contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         p.title = "MR Watcher — Configuration"
         p.contentViewController = hosting
-        p.setContentSize(NSSize(width: 380, height: 440))
+        p.setContentSize(panelSize)
         p.isFloatingPanel = true
         p.center()
         p.makeKeyAndOrderFront(nil)
