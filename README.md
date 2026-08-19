@@ -102,7 +102,9 @@ Informations disponibles sur une ligne :
 - **Rechercher les mises à jour…** — vérifie et installe une release Sparkle signée
 
 Les actions affichent un tooltip immédiat au survol. Les notes de la release
-installée sont disponibles au survol de son numéro de version.
+installée sont disponibles au survol de son numéro de version. Un **clic** sur ce
+numéro lance la recherche de mise à jour, qu'une nouvelle version soit déjà
+détectée ou non ; une pastille orange signale qu'il y en a une.
 
 ### Notifications macOS
 

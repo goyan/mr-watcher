@@ -32,7 +32,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F19 | Vue « Mes MRs » homogène avec les vues de revue (même table à colonnes, même langage de tags), et total de labels surveillés détaillé par statut Jira en pied de page | ✅ done |
 | F20 | Chargement initial explicite, ticket Jira intégré aux métadonnées et auteur affiché en `Prénom N.`, y compris avec un pseudo GitLab technique | ✅ done |
 | F21 | Rafraîchissement individuel d'une MR, avec mise à jour GitLab puis Jira sans poll global | ✅ done |
-| F22 | Avertissement non bloquant Jira/acli avec détail assaini au survol, et tooltips instantanés pour les actions et les notes de version | ✅ done |
+| F22 | Avertissement non bloquant Jira/acli avec détail assaini au survol, et info-bulles instantanées sur **toutes** les surfaces — fenêtre et panneau de barre de menus, 39 sur 39 dans ce dernier | ✅ done |
 | F23 | Labels GitLab configurables pour alimenter « À revoir », avec repli `Indigo, indigo` | ✅ done |
 | F24 | Notes de version embarquées et visibles au survol de la version installée | ✅ done |
 | F25 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
@@ -44,6 +44,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F31 | URL Jira et préfixe de ticket configurables : sans URL, le ticket reste affiché mais n'est plus un lien ; le préfixe est échappé avant d'entrer dans la recherche | ✅ done |
 | F32 | Avertissement « URL Jira non configurée » dans la fenêtre et le panneau, affiché seulement si un ticket est détecté sans URL renseignée, et ouvrant les réglages au clic | ✅ done |
 | F33 | Ticket et statut Jira réunis en un seul tag (`PROD-12345 · Code review`) sur la ligne du titre, et cellule MR ramenée à une cible de clic unique occupant toute sa hauteur | ✅ done |
+| F34 | Numéro de version toujours actionnable : un clic lance la recherche de mise à jour dans les deux vues, la pastille orange restant réservée à une mise à jour réellement disponible | ✅ done |
 
 ### Actions
 
