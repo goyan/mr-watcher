@@ -1,48 +1,6 @@
 import AppKit
 import SwiftUI
 
-struct ReviewSectionGroups {
-    let toReview: [MRSummary]
-    let others: [MRSummary]
-    let approved: [MRSummary]
-
-    init(
-        mrs: [MRSummary],
-        statuses: [MRKey: MRApprovals],
-        jiraStatuses: [MRKey: JiraIssueStatus],
-        separatesApproved: Bool
-    ) {
-        let approvedMRs = separatesApproved
-            ? mrs.filter { mr in
-                let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-                guard let status = statuses[key] else { return false }
-                return status.isApprovedByMe && status.myUnresolvedThreads == 0
-            }
-            : []
-        approved = approvedMRs
-
-        let approvedKeys = Set(
-            approvedMRs.map { MRKey(projectId: $0.projectId, iid: $0.iid) }
-        )
-        let activeMRs = mrs.filter { mr in
-            !approvedKeys.contains(MRKey(projectId: mr.projectId, iid: mr.iid))
-        }
-        toReview = activeMRs.filter { mr in
-            let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-            guard let status = jiraStatuses[key]?.name else { return false }
-            return ["to review", "code review"].contains(
-                status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            )
-        }
-        let toReviewKeys = Set(
-            toReview.map { MRKey(projectId: $0.projectId, iid: $0.iid) }
-        )
-        others = activeMRs.filter { mr in
-            !toReviewKeys.contains(MRKey(projectId: mr.projectId, iid: mr.iid))
-        }
-    }
-}
-
 struct StatusView: View {
     private enum ContentTab: String, CaseIterable, Identifiable {
         case myMRs = "Mes MRs"
@@ -59,11 +17,12 @@ struct StatusView: View {
 
     @AppStorage("pollIntervalSeconds") private var pollIntervalSeconds = 600
     @State private var contentTab: ContentTab = .myMRs
-    @State private var hoveredAction: MRKey?
-    @State private var hoveredPersonalThread: MRKey?
-    @State private var hoveredOtherThread: MRKey?
-    @State private var hoveredMR: MRKey?
-    @State private var hoveredReviewDismissal: MRKey?
+    // Non persistées : retour à `.all` à chaque lancement (plan D2).
+    @State private var myReviewsChip: ReviewChip = .all
+    @State private var reviewableChip: ReviewChip = .all
+
+    private static let myReviewsChips: [ReviewChip] = [.all, .needsRevisit, .myThreads, .approved]
+    private static let reviewableChips: [ReviewChip] = [.all, .needsRevisit, .myThreads, .noReview, .toReview]
 
     private var openedMRs: [MRSummary] {
         store.mrs
@@ -77,12 +36,37 @@ struct StatusView: View {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    private var mrLookup: [MRKey: MRSummary] {
+        lookup(from: store.mrs)
+    }
+
+    private func lookup(from mrs: [MRSummary]) -> [MRKey: MRSummary] {
+        Dictionary(
+            mrs.map { (MRKey(projectId: $0.projectId, iid: $0.iid), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// Filtre l'auto review masquée si Claude a déjà approuvé — même prédicat que
+    /// l'ancien `manualPipelineActions(for:key:)`, calculé une fois pour toutes les lignes.
+    private var manualActionsByKey: [MRKey: [ManualPipelineAction]] {
+        Dictionary(uniqueKeysWithValues: store.manualPipelineActions.map { key, value in
+            (key, value.actions.filter { $0.kind != .autoReview || !store.isApprovedByClaude(key: key) })
+        })
+    }
+
     private var reviewableToReviewCount: Int {
         store.reviewableMRs.filter(isToReview).count
     }
 
     private var reviewableOtherCount: Int {
         store.reviewableMRs.count - reviewableToReviewCount
+    }
+
+    /// Compteur de pied de page « à revalider » — réutilise le prédicat de chip
+    /// (`StatusPresentation.swift`), jamais réimplémenté ici.
+    private func needsRevisitCount(mrs: [MRSummary], statuses: [MRKey: MRApprovals]) -> Int {
+        chipCounts(for: [.needsRevisit], mrs: mrs, approvals: statuses, jiraStatuses: store.jiraStatuses)[.needsRevisit] ?? 0
     }
 
     private var appVersion: String {
@@ -105,11 +89,13 @@ struct StatusView: View {
             footer
         }
         .frame(
-            minWidth: 760,
-            idealWidth: 820,
+            // Dérivée du budget réel des colonnes (bug §1 étape 4) — ne pas recoder un
+            // nombre magique ici : voir `DesignTokens.tableMinWidth`.
+            minWidth: DesignTokens.tableMinWidth,
+            idealWidth: 1_140,
             maxWidth: .infinity,
             minHeight: 600,
-            idealHeight: 650,
+            idealHeight: 700,
             maxHeight: .infinity
         )
     }
@@ -266,16 +252,52 @@ struct StatusView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
+            let now = Date()
+            let lookup = mrLookup
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if !openedMRs.isEmpty {
-                        mrSection(title: "Ouvertes (\(openedMRs.count))", mrs: openedMRs)
-                    }
-
-                    if !mergedMRs.isEmpty {
-                        mrSection(title: "Récemment mergées (\(mergedMRs.count))", mrs: mergedMRs)
-                    }
-                }
+                StatusTableView(
+                    layout: .author,
+                    openRows: buildRows(
+                        mrs: store.mrs,
+                        approvals: store.approvals,
+                        jiraStatuses: store.jiraStatuses,
+                        jiraLoadingKeys: store.jiraLoadingMRKeys,
+                        testsAreGreen: { key in
+                            guard let mr = lookup[key] else { return false }
+                            return store.testsAreGreen(
+                                for: key,
+                                pipelineId: mr.headPipeline?.id,
+                                fallbackPipelineStatus: mr.headPipeline?.status
+                            )
+                        },
+                        context: .author,
+                        now: now
+                    ),
+                    mergedRows: buildMergedRows(mrs: store.mrs, jiraStatuses: store.jiraStatuses, now: now),
+                    mrLookup: lookup,
+                    refreshingKeys: store.refreshingMRKeys,
+                    manualActions: manualActionsByKey,
+                    launchingJobIds: store.launchingManualPipelineJobIds,
+                    callbacks: StatusTableCallbacks(
+                        openURL: openURL,
+                        refresh: { key in
+                            Task { await scheduler.refresh(projectId: key.projectId, mrIid: key.iid) }
+                        },
+                        playAction: { key, action in
+                            Task {
+                                await scheduler.playManualPipelineAction(
+                                    action,
+                                    projectId: key.projectId,
+                                    mrIid: key.iid
+                                )
+                            }
+                        },
+                        rebase: { mr in confirmRebase(for: mr) },
+                        dismissMerged: { key in store.dismiss(key: key) },
+                        approve: nil,
+                        dismissReview: nil
+                    )
+                )
                 .padding(.vertical, 8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -301,18 +323,13 @@ struct StatusView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    reviewSections(
-                        for: store.reviewedMRs,
-                        statuses: store.reviewStatuses,
-                        showsActions: true,
-                        separatesApproved: true
-                    )
-                }
-                .padding(.vertical, 8)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            reviewerTable(
+                mrs: store.reviewedMRs,
+                statuses: store.reviewStatuses,
+                chips: Self.myReviewsChips,
+                selection: $myReviewsChip,
+                showsDismiss: true
+            )
         }
     }
 
@@ -335,15 +352,84 @@ struct StatusView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
+            reviewerTable(
+                mrs: store.reviewableMRs,
+                statuses: store.reviewableStatuses,
+                chips: Self.reviewableChips,
+                selection: $reviewableChip,
+                showsDismiss: false
+            )
+        }
+    }
+
+    /// Table reviewer partagée entre « Mes revues » et « À revoir » — seuls la source
+    /// de données, les chips et `showsDismiss` diffèrent. Le piège de cette étape :
+    /// `lookup`/`testsAreGreen` doivent puiser dans `mrs` (donc `store.reviewedMRs` ou
+    /// `store.reviewableMRs`), jamais dans `store.mrs` — une MR reviewée n'y est pas
+    /// forcément (on ne l'a pas forcément soi-même ouverte).
+    @ViewBuilder
+    private func reviewerTable(
+        mrs: [MRSummary],
+        statuses: [MRKey: MRApprovals],
+        chips: [ReviewChip],
+        selection: Binding<ReviewChip>,
+        showsDismiss: Bool
+    ) -> some View {
+        let now = Date()
+        let rowLookup = lookup(from: mrs)
+        let filteredMRs = mrs.filter { mr in
+            let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+            return matchesChip(selection.wrappedValue, approvals: statuses[key], jiraStatus: store.jiraStatuses[key])
+        }
+        let counts = chipCounts(for: chips, mrs: mrs, approvals: statuses, jiraStatuses: store.jiraStatuses)
+
+        VStack(spacing: 0) {
+            FilterChipsView(chips: chips, counts: counts, selection: selection)
+            Divider()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    reviewSections(
-                        for: store.reviewableMRs,
-                        statuses: store.reviewableStatuses,
-                        showsActions: true,
-                        separatesApproved: false
+                StatusTableView(
+                    layout: .reviewer(showsDismiss: showsDismiss),
+                    openRows: buildRows(
+                        mrs: filteredMRs,
+                        approvals: statuses,
+                        jiraStatuses: store.jiraStatuses,
+                        jiraLoadingKeys: store.jiraLoadingMRKeys,
+                        testsAreGreen: { key in
+                            guard let mr = rowLookup[key] else { return false }
+                            return store.testsAreGreen(
+                                for: key,
+                                pipelineId: mr.headPipeline?.id,
+                                fallbackPipelineStatus: mr.headPipeline?.status
+                            )
+                        },
+                        context: .reviewer,
+                        now: now
+                    ),
+                    mergedRows: [],
+                    mrLookup: rowLookup,
+                    refreshingKeys: store.refreshingMRKeys,
+                    manualActions: manualActionsByKey,
+                    launchingJobIds: store.launchingManualPipelineJobIds,
+                    callbacks: StatusTableCallbacks(
+                        openURL: openURL,
+                        refresh: { key in
+                            Task { await scheduler.refresh(projectId: key.projectId, mrIid: key.iid) }
+                        },
+                        playAction: { key, action in
+                            Task {
+                                await scheduler.playManualPipelineAction(
+                                    action,
+                                    projectId: key.projectId,
+                                    mrIid: key.iid
+                                )
+                            }
+                        },
+                        rebase: nil,
+                        dismissMerged: nil,
+                        approve: { mr in confirmApproval(for: mr) },
+                        dismissReview: showsDismiss ? { key in store.hideReviewedMR(key: key) } : nil
                     )
-                }
+                )
                 .padding(.vertical, 8)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -365,94 +451,6 @@ struct StatusView: View {
         .accessibilityLabel("Chargement des merge requests, récupération des données GitLab")
     }
 
-    private func mrSection(title: String, mrs: [MRSummary]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 6)
-
-            ForEach(mrs) { mr in
-                mrRow(mr)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 5)
-                Divider()
-                    .padding(.horizontal, 16)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func reviewSections(
-        for mrs: [MRSummary],
-        statuses: [MRKey: MRApprovals],
-        showsActions: Bool,
-        separatesApproved: Bool
-    ) -> some View {
-        let groups = ReviewSectionGroups(
-            mrs: mrs,
-            statuses: statuses,
-            jiraStatuses: store.jiraStatuses,
-            separatesApproved: separatesApproved
-        )
-
-        if !groups.toReview.isEmpty {
-            reviewSection(
-                title: "To Review",
-                mrs: groups.toReview,
-                statuses: statuses,
-                showsActions: showsActions
-            )
-        }
-        if !groups.others.isEmpty {
-            reviewSection(
-                title: "Les autres",
-                mrs: groups.others,
-                statuses: statuses,
-                showsActions: showsActions
-            )
-        }
-        if !groups.approved.isEmpty {
-            reviewSection(
-                title: "Approved",
-                mrs: groups.approved,
-                statuses: statuses,
-                showsActions: showsActions
-            )
-        }
-    }
-
-    private func reviewSection(
-        title: String,
-        mrs: [MRSummary],
-        statuses: [MRKey: MRApprovals],
-        showsActions: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
-                Text(title)
-                Text("(\(mrs.count))")
-            }
-            .font(.callout.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
-
-            if !mrs.isEmpty {
-                ForEach(mrs) { mr in
-                    reviewRow(mr, statuses: statuses, showsActions: showsActions)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 5)
-                    Divider()
-                        .padding(.horizontal, 16)
-                }
-            }
-        }
-    }
-
     private var footer: some View {
         HStack {
             if store.lastError != nil {
@@ -466,29 +464,48 @@ struct StatusView: View {
                 .buttonStyle(.link)
                 .font(.callout)
             } else {
+                // Text(verbatim:) partout ci-dessous : un Int interpolé dans un Text("...")
+                // littéral construit une LocalizedStringKey, qui applique le séparateur de
+                // milliers français (le bug déjà payé sur !IID — plan §9.3a). Ces compteurs
+                // restent petits aujourd'hui, mais on ferme la classe plutôt que de la
+                // laisser se réarmer dans un pied de page qu'on relira moins souvent.
                 if contentTab == .myMRs {
-                    Text("\(openedMRs.count) ouverte\(openedMRs.count == 1 ? "" : "s")")
+                    Text(verbatim: "\(openedMRs.count) ouverte\(openedMRs.count == 1 ? "" : "s")")
                         .foregroundStyle(.secondary)
                     if !mergedMRs.isEmpty {
                         Text("·")
                             .foregroundStyle(.tertiary)
-                        Text("\(mergedMRs.count) mergée\(mergedMRs.count == 1 ? "" : "s")")
+                        Text(verbatim: "\(mergedMRs.count) mergée\(mergedMRs.count == 1 ? "" : "s")")
                             .foregroundStyle(.secondary)
                     }
                 } else if contentTab == .myReviews {
-                    Text("\(store.reviewedMRs.count) revue\(store.reviewedMRs.count == 1 ? "" : "s") en cours")
+                    Text(verbatim: "\(store.reviewedMRs.count) revue\(store.reviewedMRs.count == 1 ? "" : "s") en cours")
                         .foregroundStyle(.secondary)
+                    let revisit = needsRevisitCount(mrs: store.reviewedMRs, statuses: store.reviewStatuses)
+                    if revisit > 0 {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(verbatim: "\(revisit) à revalider")
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
-                    Text("\(store.reviewableMRs.count) MR\(store.reviewableMRs.count == 1 ? "" : "s") à revoir")
+                    Text(verbatim: "\(store.reviewableMRs.count) MR\(store.reviewableMRs.count == 1 ? "" : "s") à revoir")
                         .foregroundStyle(.secondary)
                     Text("·")
                         .foregroundStyle(.tertiary)
-                    Text("\(reviewableToReviewCount) To Review")
+                    Text(verbatim: "\(reviewableToReviewCount) To Review")
                         .foregroundStyle(.secondary)
                     Text("·")
                         .foregroundStyle(.tertiary)
-                    Text("\(reviewableOtherCount) Les autres")
+                    Text(verbatim: "\(reviewableOtherCount) Les autres")
                         .foregroundStyle(.secondary)
+                    let revisit = needsRevisitCount(mrs: store.reviewableMRs, statuses: store.reviewableStatuses)
+                    if revisit > 0 {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(verbatim: "\(revisit) à revalider")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -530,793 +547,11 @@ struct StatusView: View {
         .padding(.vertical, 10)
     }
 
-    private func mrRow(_ mr: MRSummary) -> some View {
-        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 8) {
-                        Button {
-                            openURL(mr.webUrl)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("!\(mr.iid)")
-                                    .fontWeight(.semibold)
-                                if let author = mr.author {
-                                    Text(author.shortDisplayName)
-                                        .fontWeight(.semibold)
-                                        .help("Auteur : \(author.fullDescription)")
-                                }
-                                Text("[\(projectName(for: mr))]")
-                            }
-                            .font(.system(.callout, design: .monospaced))
-                            .lineLimit(1)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Ouvrir !\(mr.iid) dans GitLab")
-                        .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
-                        .accessibilityLabel(mrAccessibilityLabel(for: mr))
-
-                        if let ticket = ticket(for: mr) {
-                            Button {
-                                openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-                            } label: {
-                                Text(ticket)
-                                    .font(.system(.callout, design: .monospaced))
-                                    .foregroundStyle(.blue)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Ouvrir \(ticket) dans Jira")
-                            .immediateTooltip("Ouvrir \(ticket) dans Jira")
-                            .accessibilityLabel("Ouvrir \(ticket) dans Jira")
-                        }
-                    }
-
-                    Button {
-                        openURL(mr.webUrl)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(mr.title)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Ouvrir !\(mr.iid) dans GitLab")
-                    .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
-                    .accessibilityLabel(mrAccessibilityLabel(for: mr))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: 6) {
-                    refreshButton(for: mr, key: key)
-                    manualPipelineActions(for: mr, key: key)
-                    actionButton(for: mr)
-                }
-            }
-
-            mrSignals(for: mr, key: key)
-            dateRow(for: mr)
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 5)
-        .background {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(hoveredMR == key ? Color.secondary.opacity(0.10) : .clear)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 4))
-        .onHover { isHovering in
-            hoveredMR = isHovering ? key : nil
-        }
-    }
-
-    private func reviewRow(
-        _ mr: MRSummary,
-        statuses: [MRKey: MRApprovals],
-        showsActions: Bool
-    ) -> some View {
-        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 8) {
-                        Button {
-                            openURL(mr.webUrl)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("!\(mr.iid)")
-                                    .fontWeight(.semibold)
-                                if let author = mr.author {
-                                    Text(author.shortDisplayName)
-                                        .fontWeight(.semibold)
-                                        .help("Auteur : \(author.fullDescription)")
-                                }
-                                Text("[\(projectName(for: mr))]")
-                            }
-                            .font(.system(.callout, design: .monospaced))
-                            .lineLimit(1)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Ouvrir !\(mr.iid) dans GitLab")
-                        .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
-                        .accessibilityLabel(reviewAccessibilityLabel(for: mr))
-
-                        if let ticket = ticket(for: mr) {
-                            Button {
-                                openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-                            } label: {
-                                Text(ticket)
-                                    .font(.system(.callout, design: .monospaced))
-                                    .foregroundStyle(.blue)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Ouvrir \(ticket) dans Jira")
-                            .immediateTooltip("Ouvrir \(ticket) dans Jira")
-                            .accessibilityLabel("Ouvrir \(ticket) dans Jira")
-                        }
-                    }
-
-                    Button {
-                        openURL(mr.webUrl)
-                    } label: {
-                        Text(mr.title)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Ouvrir !\(mr.iid) dans GitLab")
-                    .immediateTooltip("Ouvrir !\(mr.iid) dans GitLab")
-                    .accessibilityLabel(reviewAccessibilityLabel(for: mr))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: 6) {
-                    refreshButton(for: mr, key: key)
-                    manualPipelineActions(for: mr, key: key)
-                    if showsActions {
-                        reviewActions(for: mr, key: key, statuses: statuses)
-                    }
-                }
-            }
-
-            reviewSignals(for: mr, key: key, statuses: statuses)
-            DateRowView(
-                createdLabel: "Creee: \(ageString(mr.createdAt))",
-                createdTooltip: formatDate(mr.createdAt),
-                mergedLabel: nil,
-                mergedTooltip: nil
-            )
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 5)
-        .background {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(hoveredMR == key ? Color.secondary.opacity(0.10) : .clear)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 4))
-        .onHover { isHovering in
-            hoveredMR = isHovering ? key : nil
-        }
-    }
-
-    @ViewBuilder
-    private func reviewSignals(
-        for mr: MRSummary,
-        key: MRKey,
-        statuses: [MRKey: MRApprovals]
-    ) -> some View {
-        TagFlowLayout {
-            if let ticket = ticket(for: mr),
-               let jira = store.jiraStatuses[key] {
-                jiraMetadata(jira, isOpen: true, ticket: ticket)
-            } else if let ticket = ticket(for: mr),
-                      store.jiraLoadingMRKeys.contains(key) {
-                jiraLoadingMetadata(ticket: ticket)
-            }
-
-            pipelineMetadata(for: mr)
-
-            if mr.hasConflicts {
-                SemanticTag(
-                    title: "Conflit",
-                    systemImage: "exclamationmark.triangle.fill",
-                    tone: .critical
-                )
-            }
-
-            if let behind = mr.divergedCommitsCount, behind > 0 {
-                SemanticTag(
-                    title: behindTagTitle(behind),
-                    systemImage: "arrow.down",
-                    tone: .attention
-                )
-            }
-
-            if let status = statuses[key] {
-                SemanticTag(
-                    title: "\(status.given)/\(status.required) appro.",
-                    systemImage: status.given >= status.required ? "checkmark.circle.fill" : "hand.thumbsup",
-                    tone: status.given >= status.required ? .positive : .neutral
-                )
-                .help("\(status.given) approbation\(status.given == 1 ? "" : "s") sur \(status.required)")
-
-                if status.isApprovedByMe {
-                    SemanticTag(
-                        title: "Approved",
-                        systemImage: "checkmark.circle.fill",
-                        tone: .positive
-                    )
-                    .help("Vous avez approuvé cette merge request")
-                    .accessibilityLabel("Merge request approuvée")
-                }
-
-                revisitThreadsButton(for: mr, status: status)
-
-                personalThreadButton(for: mr, status: status, key: key)
-
-                otherThreadButton(for: mr, status: status, key: key)
-            }
-        }
-    }
-
-    private func reviewAccessibilityLabel(for mr: MRSummary) -> String {
-        let author = mr.author.map { ", auteur \($0.fullDescription)" } ?? ""
-        return "Ouvrir la merge request !\(mr.iid), \(mr.title)\(author), dans GitLab"
-    }
-
-    private func mrAccessibilityLabel(for mr: MRSummary) -> String {
-        let author = mr.author.map { ", auteur \($0.fullDescription)" } ?? ""
-        return "Ouvrir la merge request !\(mr.iid), \(mr.title)\(author), dans GitLab"
-    }
-
-    @ViewBuilder
-    private func mrSignals(for mr: MRSummary, key: MRKey) -> some View {
-        TagFlowLayout {
-            if let jira = store.jiraStatuses[key] {
-                jiraMetadata(jira, isOpen: mr.state == "opened", ticket: ticket(for: mr))
-            } else if let ticket = ticket(for: mr),
-                      store.jiraLoadingMRKeys.contains(key) {
-                jiraLoadingMetadata(ticket: ticket)
-            }
-
-            stateMetadata(for: mr)
-        }
-    }
-
-    @ViewBuilder
-    private func revisitThreadsButton(
-        for mr: MRSummary,
-        status: MRApprovals
-    ) -> some View {
-        if status.personalThreadsNeedingRevisit > 0,
-           let noteId = status.firstPersonalThreadNeedingRevisitNoteId {
-            let threadCount = status.personalThreadsNeedingRevisit
-            Button {
-                openURL("\(mr.webUrl)#note_\(noteId)")
-            } label: {
-                SemanticTag(
-                    title: "À revalider · \(threadCount) fil\(threadCount == 1 ? "" : "s")",
-                    systemImage: "arrow.triangle.2.circlepath",
-                    tone: .attention
-                )
-            }
-            .buttonStyle(.plain)
-            .help("Ouvrir le premier fil personnel à revalider")
-            .immediateTooltip("Ouvrir le premier fil personnel à revalider")
-            .accessibilityLabel("Ouvrir le premier fil personnel à revalider dans GitLab")
-        }
-    }
-
-    @ViewBuilder
-    private func personalThreadButton(
-        for mr: MRSummary,
-        status: MRApprovals,
-        key: MRKey
-    ) -> some View {
-        if status.myUnresolvedThreads > 0,
-           let noteId = status.firstMyUnresolvedThreadNoteId {
-            Button {
-                openURL("\(mr.webUrl)#note_\(noteId)")
-            } label: {
-                SemanticTag(
-                    title: "\(status.myUnresolvedThreads) mes fils",
-                    systemImage: "bubble.left.fill",
-                    tone: .accent
-                )
-                    .background(
-                        hoveredPersonalThread == key ? Color.secondary.opacity(0.20) : .clear,
-                        in: RoundedRectangle(cornerRadius: 4)
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("Ouvrir votre premier fil non resolu dans GitLab")
-            .immediateTooltip("Ouvrir votre premier fil non resolu dans GitLab")
-            .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non resolus dans GitLab")
-            .onHover { isHovering in
-                hoveredPersonalThread = isHovering ? key : nil
-            }
-        } else {
-            SemanticTag(
-                title: "\(status.myUnresolvedThreads) mes fils",
-                systemImage: "bubble.left.fill",
-                tone: status.myUnresolvedThreads > 0 ? .accent : .neutral
-            )
-                .help("\(status.myUnresolvedThreads) fil\(status.myUnresolvedThreads == 1 ? "" : "s") vous concernant non resolu\(status.myUnresolvedThreads == 1 ? "" : "s")")
-        }
-    }
-
-    @ViewBuilder
-    private func otherThreadButton(
-        for mr: MRSummary,
-        status: MRApprovals,
-        key: MRKey
-    ) -> some View {
-        if status.otherUnresolvedThreads > 0,
-           let noteId = status.firstOtherUnresolvedThreadNoteId {
-            Button {
-                openURL("\(mr.webUrl)#note_\(noteId)")
-            } label: {
-                SemanticTag(
-                    title: "\(status.otherUnresolvedThreads) autres",
-                    systemImage: "bubble.left.and.bubble.right.fill",
-                    tone: .attention
-                )
-                    .background(
-                        hoveredOtherThread == key ? Color.secondary.opacity(0.20) : .clear,
-                        in: RoundedRectangle(cornerRadius: 4)
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("Ouvrir le premier fil non resolu des autres dans GitLab")
-            .immediateTooltip("Ouvrir le premier fil non resolu des autres dans GitLab")
-            .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non resolus des autres dans GitLab")
-            .onHover { isHovering in
-                hoveredOtherThread = isHovering ? key : nil
-            }
-        } else {
-            SemanticTag(
-                title: "\(status.otherUnresolvedThreads) autres",
-                systemImage: "bubble.left.and.bubble.right.fill",
-                tone: status.otherUnresolvedThreads > 0 ? .attention : .neutral
-            )
-                .help("\(status.otherUnresolvedThreads) autre\(status.otherUnresolvedThreads == 1 ? "" : "s") fil\(status.otherUnresolvedThreads == 1 ? "" : "s") non resolu\(status.otherUnresolvedThreads == 1 ? "" : "s")")
-        }
-    }
-
-    @ViewBuilder
-    private func reviewApprovalButton(
-        for mr: MRSummary,
-        key: MRKey,
-        statuses: [MRKey: MRApprovals]
-    ) -> some View {
-        if canApproveReview(mr, key: key, statuses: statuses) {
-            Button {
-                confirmApproval(for: mr)
-            } label: {
-                Label("Approuver", systemImage: "hand.thumbsup")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(store.isLoading)
-            .help("Approuver !\(mr.iid) dans GitLab")
-            .immediateTooltip("Approuver !\(mr.iid) dans GitLab")
-            .accessibilityLabel("Approuver la merge request !\(mr.iid) dans GitLab")
-        }
-    }
-
-    private func reviewActions(
-        for mr: MRSummary,
-        key: MRKey,
-        statuses: [MRKey: MRApprovals]
-    ) -> some View {
-        HStack(spacing: 6) {
-            reviewApprovalButton(for: mr, key: key, statuses: statuses)
-            if store.reviewedMRs.contains(where: {
-                MRKey(projectId: $0.projectId, iid: $0.iid) == key
-            }) {
-                Button {
-                    store.hideReviewedMR(key: key)
-                } label: {
-                    Image(systemName: "xmark")
-                        .frame(width: 16, height: 16)
-                        .padding(2)
-                        .background {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(
-                                    hoveredReviewDismissal == key
-                                        ? Color.secondary.opacity(0.18)
-                                        : .clear
-                                )
-                        }
-                }
-                .buttonStyle(.plain)
-                .contentShape(RoundedRectangle(cornerRadius: 4))
-                .foregroundStyle(.secondary)
-                .help("Masquer !\(mr.iid) de mes revues")
-                .immediateTooltip("Masquer !\(mr.iid) de mes revues")
-                .accessibilityLabel("Masquer la merge request !\(mr.iid) de mes revues")
-                .onHover { isHovering in
-                    hoveredReviewDismissal = isHovering ? key : nil
-                    isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
-                }
-            }
-        }
-    }
-
-    private func refreshButton(for mr: MRSummary, key: MRKey) -> some View {
-        Button {
-            Task {
-                await scheduler.refresh(projectId: mr.projectId, mrIid: mr.iid)
-            }
-        } label: {
-            Group {
-                if store.refreshingMRKeys.contains(key) {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.clockwise")
-                }
-            }
-            .frame(width: 16, height: 16)
-            .padding(2)
-        }
-        .buttonStyle(.plain)
-        .contentShape(RoundedRectangle(cornerRadius: 4))
-        .help("Actualiser !\(mr.iid)")
-        .immediateTooltip("Actualiser !\(mr.iid)")
-        .accessibilityLabel("Actualiser la merge request !\(mr.iid)")
-        .disabled(store.refreshingMRKeys.contains(key) || !store.isConfigured)
-    }
-
-    private func canApproveReview(
-        _ mr: MRSummary,
-        key: MRKey,
-        statuses: [MRKey: MRApprovals]
-    ) -> Bool {
-        guard mr.state == "opened",
-              !mr.isDraft,
-              store.testsAreGreen(
-                  for: key,
-                  pipelineId: mr.headPipeline?.id,
-                  fallbackPipelineStatus: mr.headPipeline?.status
-              ),
-              let status = statuses[key] else {
-            return false
-        }
-        return status.myUnresolvedThreads == 0 && !status.isApprovedByMe
-    }
-
-    @ViewBuilder
-    private func manualPipelineActions(for mr: MRSummary, key: MRKey) -> some View {
-        let actions = (store.manualPipelineActions[key]?.actions ?? []).filter {
-            $0.kind != .autoReview || !store.isApprovedByClaude(key: key)
-        }
-        ForEach(actions) { action in
-            if store.launchingManualPipelineJobIds.contains(action.jobId) {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(width: 16, height: 16)
-                    .accessibilityLabel("\(action.kind.title) en cours")
-            } else {
-                Button {
-                    Task {
-                        await scheduler.playManualPipelineAction(
-                            action,
-                            projectId: mr.projectId,
-                            mrIid: mr.iid
-                        )
-                    }
-                } label: {
-                    Label(action.kind.title, systemImage: action.kind.systemImage)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("\(action.kind.title) pour !\(mr.iid)")
-                .immediateTooltip("\(action.kind.title) pour !\(mr.iid)")
-                .accessibilityLabel("\(action.kind.title) pour la merge request !\(mr.iid)")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func trailingActions(for mr: MRSummary) -> some View {
-        let ticketKey = ticket(for: mr)
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Group {
-                if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
-                    jiraMetadata(jira, isOpen: mr.state == "opened", ticket: ticketKey)
-                } else if let ticketKey,
-                          store.jiraLoadingMRKeys.contains(
-                              MRKey(projectId: mr.projectId, iid: mr.iid)
-                          ) {
-                    jiraLoadingMetadata(ticket: ticketKey)
-                }
-            }
-            .frame(width: 132, alignment: .leading)
-
-            actionButton(for: mr)
-                .frame(width: 108, alignment: .trailing)
-        }
-        .font(.system(.callout, design: .monospaced))
-        .lineLimit(1)
-    }
-
-    @ViewBuilder
-    private func actionButton(for mr: MRSummary) -> some View {
-        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        if mr.state == "merged" {
-            Button {
-                store.dismiss(key: key)
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 16, height: 16)
-                    .padding(2)
-                    .background {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(hoveredAction == key ? Color.secondary.opacity(0.18) : .clear)
-                    }
-            }
-            .buttonStyle(.plain)
-            .contentShape(RoundedRectangle(cornerRadius: 4))
-            .onHover { isHovering in
-                hoveredAction = isHovering ? key : nil
-                isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
-            }
-            .help("Retirer !\(mr.iid) de la liste")
-            .immediateTooltip("Retirer !\(mr.iid) de la liste")
-        } else if let behind = mr.divergedCommitsCount, behind > 0, !mr.hasConflicts {
-            Button {
-                confirmRebase(for: mr)
-            } label: {
-                Label("/rebase", systemImage: "arrow.triangle.2.circlepath")
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(hoveredAction == key ? Color.secondary.opacity(0.18) : .clear)
-                    }
-            }
-            .buttonStyle(.plain)
-            .contentShape(RoundedRectangle(cornerRadius: 4))
-            .onHover { isHovering in
-                hoveredAction = isHovering ? key : nil
-                isHovering ? NSCursor.pointingHand.push() : NSCursor.pop()
-            }
-            .help("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
-            .immediateTooltip("Lancer /rebase pour !\(mr.iid) (\(behind) commits de retard)")
-        }
-    }
-
-    private func metadata(for mr: MRSummary) -> some View {
-        HStack(spacing: 8) {
-            Text("!\(mr.iid)")
-                .fontWeight(.semibold)
-
-            Text("[\(projectName(for: mr))]")
-
-            if let ticket = ticket(for: mr) {
-                Button {
-                    openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-                } label: {
-                    Text(ticket)
-                }
-                .buttonStyle(.plain)
-            }
-
-            stateMetadata(for: mr)
-        }
-        .font(.system(.callout, design: .monospaced))
-        .lineLimit(1)
-    }
-
-    @ViewBuilder
-    private func stateMetadata(for mr: MRSummary) -> some View {
-        if mr.state != "merged" {
-            if mr.isDraft {
-                SemanticTag(title: "Draft", systemImage: "pencil", tone: .neutral)
-            }
-
-            pipelineMetadata(for: mr)
-
-            if mr.hasConflicts {
-                SemanticTag(
-                    title: "Conflit",
-                    systemImage: "exclamationmark.triangle.fill",
-                    tone: .critical
-                )
-            }
-
-            if let behind = mr.divergedCommitsCount, behind > 0 {
-                SemanticTag(
-                    title: behindTagTitle(behind),
-                    systemImage: "arrow.down",
-                    tone: .attention
-                )
-            }
-
-            approvalMetadata(for: mr)
-        }
-    }
-
-    @ViewBuilder
-    private func dateRow(for mr: MRSummary) -> some View {
-        DateRowView(
-            createdLabel: "Créée: \(ageString(mr.createdAt))",
-            createdTooltip: formatDate(mr.createdAt),
-            mergedLabel: mr.state == "merged" ? mr.mergedAt.map { "Mergée: \(ageString($0))" } : nil,
-            mergedTooltip: mr.state == "merged" ? mr.mergedAt.map { formatDate($0) } : nil
-        )
-    }
-
-    private static let dateFormatterCurrentYear: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "fr_FR")
-        f.dateFormat = "d MMM"
-        return f
-    }()
-
-    private static let dateFormatterOtherYear: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "fr_FR")
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
-
-    private func formatDate(_ date: Date?) -> String {
-        guard let date else { return "?" }
-        let formatter = Calendar.current.component(.year, from: date) == Calendar.current.component(.year, from: Date())
-            ? Self.dateFormatterCurrentYear
-            : Self.dateFormatterOtherYear
-        return formatter.string(from: date)
-    }
-
-    @ViewBuilder
-    private func pipelineMetadata(for mr: MRSummary) -> some View {
-        switch mr.headPipeline?.status {
-        case "success":
-            SemanticTag(title: "CI OK", systemImage: "checkmark.circle.fill", tone: .positive)
-        case "failed":
-            SemanticTag(title: "CI KO", systemImage: "xmark.circle.fill", tone: .critical)
-        case "running":
-            SemanticTag(title: "CI en cours", systemImage: "arrow.triangle.2.circlepath", tone: .attention)
-        case "pending":
-            SemanticTag(title: "CI attente", systemImage: "clock.fill", tone: .attention)
-        case "canceled":
-            SemanticTag(title: "CI annulée", systemImage: "minus.circle.fill", tone: .neutral)
-        case .some:
-            SemanticTag(title: "CI ?", systemImage: "questionmark.circle", tone: .neutral)
-        case .none:
-            SemanticTag(title: "CI n/a", systemImage: "minus", tone: .neutral)
-        }
-    }
-
-    @ViewBuilder
-    private func approvalMetadata(for mr: MRSummary) -> some View {
-        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        if let approval = store.approvals[key] {
-            SemanticTag(
-                title: "\(approval.given)/\(approval.required) appro.",
-                systemImage: approval.given >= approval.required ? "checkmark.circle.fill" : "hand.thumbsup.fill",
-                tone: approval.given >= approval.required ? .positive : .neutral
-            )
-
-            if approval.unresolvedThreads > 0 {
-                SemanticTag(
-                    title: "\(approval.unresolvedThreads) fil\(approval.unresolvedThreads == 1 ? "" : "s")",
-                    systemImage: "bubble.left.fill",
-                    tone: .attention
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func jiraMetadata(_ jira: JiraIssueStatus, isOpen: Bool, ticket: String?) -> some View {
-        if let ticket {
-            Button {
-                openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-            } label: {
-                SemanticTag(
-                    title: jira.name,
-                    systemImage: jiraSymbol(jira, isOpen: isOpen),
-                    tone: jiraTone(jira, isOpen: isOpen)
-                )
-            }
-            .buttonStyle(.plain)
-            .help("Ouvrir \(ticket) dans Jira")
-            .immediateTooltip("Ouvrir \(ticket) dans Jira")
-        } else {
-            SemanticTag(
-                title: jira.name,
-                systemImage: jiraSymbol(jira, isOpen: isOpen),
-                tone: jiraTone(jira, isOpen: isOpen)
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func jiraLoadingMetadata(ticket: String) -> some View {
-        Button {
-            openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
-        } label: {
-            SemanticTag(title: "Jira...", systemImage: "ticket", tone: .neutral)
-        }
-        .buttonStyle(.plain)
-        .help("Ouvrir \(ticket) dans Jira")
-        .immediateTooltip("Ouvrir \(ticket) dans Jira")
-    }
-
-    private func projectName(for mr: MRSummary) -> String {
-        guard let url = URL(string: mr.webUrl) else { return "projet" }
-        let segments = url.path.split(separator: "/")
-        guard let dashIndex = segments.firstIndex(of: "-"), dashIndex > segments.startIndex else {
-            return "projet"
-        }
-        return String(segments[segments.index(before: dashIndex)])
-    }
-
-    private func ticket(for mr: MRSummary) -> String? {
-        ticket(in: mr.sourceBranch) ?? ticket(in: mr.title)
-    }
-
-    private func ticket(in value: String) -> String? {
-        guard let range = value.range(of: #"PROD-\d+"#, options: .regularExpression) else {
-            return nil
-        }
-        return String(value[range])
-    }
-
     private func isToReview(_ mr: MRSummary) -> Bool {
         let key = MRKey(projectId: mr.projectId, iid: mr.iid)
         guard let status = store.jiraStatuses[key]?.name else { return false }
         return ["to review", "code review"].contains(
             status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        )
-    }
-
-    private func ageString(_ date: Date) -> String {
-        let hours = Int(Date().timeIntervalSince(date) / 3_600)
-        if hours < 1 { return "<1h" }
-        if hours < 24 { return "\(hours)h" }
-        return "\(hours / 24)j"
-    }
-
-    private func jiraSymbol(_ jira: JiraIssueStatus, isOpen: Bool) -> String {
-        if isOpen && jira.isStale {
-            return "exclamationmark.triangle.fill"
-        }
-        switch jira.categoryKey {
-        case "done": return "checkmark.circle.fill"
-        case "new": return "circle"
-        default: return "clock.fill"
-        }
-    }
-
-    private func jiraColor(_ jira: JiraIssueStatus, isOpen: Bool) -> Color {
-        if isOpen && jira.isStale {
-            return .orange
-        }
-        switch jira.categoryKey {
-        case "done": return .green
-        case "new": return .blue
-        default: return .orange
-        }
-    }
-
-    private func jiraTone(_ jira: JiraIssueStatus, isOpen: Bool) -> SemanticTagTone {
-        jiraTagTone(
-            name: jira.name,
-            categoryKey: jira.categoryKey,
-            isOpen: isOpen,
-            isStale: jira.isStale
         )
     }
 
@@ -1406,50 +641,3 @@ struct StatusView: View {
     }
 }
 
-private struct DateLabelView: View {
-    let label: String
-    let tooltip: String
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Text(label)
-            .foregroundStyle(.secondary)
-            .contentShape(Rectangle())
-            .onHover { isHovered = $0 }
-            .overlay(alignment: .top) {
-                if isHovered {
-                    Text(tooltip)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
-                        .shadow(radius: 2)
-                        .offset(y: -28)
-                        .allowsHitTesting(false)
-                        .fixedSize()
-                }
-            }
-    }
-}
-
-private struct DateRowView: View {
-    let createdLabel: String
-    let createdTooltip: String
-    let mergedLabel: String?
-    let mergedTooltip: String?
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let mergedLabel, let mergedTooltip {
-                DateLabelView(label: mergedLabel, tooltip: mergedTooltip)
-            }
-            DateLabelView(label: createdLabel, tooltip: createdTooltip)
-        }
-        .font(.system(.callout, design: .monospaced))
-        .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
-        .padding(.horizontal, 4)
-    }
-}
