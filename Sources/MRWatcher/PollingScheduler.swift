@@ -106,7 +106,11 @@ final class PollingScheduler {
 
         do {
             let detail = try await gitlab.fetchMRDetail(projectId: projectId, mrIid: mrIid)
-            async let approvals = gitlab.fetchApprovals(projectId: projectId, mrIid: mrIid)
+            async let approvals = gitlab.fetchApprovals(
+                projectId: projectId,
+                mrIid: mrIid,
+                headSha: detail.headSha
+            )
             store.updateRefreshedMR(
                 detail,
                 approvals: try await approvals
@@ -375,7 +379,11 @@ final class PollingScheduler {
                 } else {
                     enrichedMRs.append(detailed)
                 }
-                if let appr = try? await gitlab.fetchApprovals(projectId: mr.projectId, mrIid: mr.iid) {
+                if let appr = try? await gitlab.fetchApprovals(
+                    projectId: mr.projectId,
+                    mrIid: mr.iid,
+                    headSha: detailed.headSha
+                ) {
                     approvals[key] = appr
                 }
             }
@@ -471,7 +479,8 @@ final class PollingScheduler {
                     reviewedMRsByKey[key] = detail
                     if let status = try? await gitlab.fetchApprovals(
                         projectId: key.projectId,
-                        mrIid: key.iid
+                        mrIid: key.iid,
+                        headSha: detail.headSha
                     ) {
                         guard status.hasCurrentUserComment || status.isApprovedByMe else {
                             retainedReviewedKeys.remove(key)
@@ -521,7 +530,8 @@ final class PollingScheduler {
                     reviewableMRs.append(detailed)
                     if let status = try? await gitlab.fetchApprovals(
                         projectId: mr.projectId,
-                        mrIid: mr.iid
+                        mrIid: mr.iid,
+                        headSha: detailed.headSha
                     ) {
                         reviewableStatuses[key] = status
                     } else if let previousStatus = previousReviewableStatuses[key] {

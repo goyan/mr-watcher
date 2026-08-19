@@ -23,9 +23,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F10 | Date de merge affichée avec âge inline (`Mergée: Xj`) et tooltip date complète en StatusView | ✅ done |
 | F11 | MRs mergées conservées après redémarrage, jusqu'à `Retirer` | ✅ done |
 | F12 | 10 dernières MRs mergées chargées depuis GitLab au démarrage | ✅ done |
-| F13 | Onglet « Mes revues » : MRs ouvertes où l'utilisateur a commenté ou approuvé, avec auteur, statut Jira, CI, conflits, retard, approbations et threads personnels/autres | ✅ done |
+| F13 | Onglet « Mes revues » : MRs ouvertes où l'utilisateur a commenté ou approuvé, avec auteur, statut Jira, CI, conflits, retard, approbations et threads personnels (créés ou auxquels il a participé)/autres | ✅ done |
 | F14 | Découverte des revues depuis les événements GitLab, conservation locale des MRs encore ouvertes et rafraîchissement borné par rotation | ✅ done |
-| F15 | Compteurs de threads personnels et externes actionnables : ouvrent directement le premier fil non résolu correspondant dans GitLab | ✅ done |
+| F15 | Compteurs de threads personnels (créés ou auxquels l'utilisateur a participé) et externes actionnables : ouvrent directement le premier fil non résolu correspondant dans GitLab | ✅ done |
 | F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant un label GitLab configuré (repli `Indigo, indigo`), hors tickets Jira abandonnés | ✅ done |
 | F17 | Priorisation des revues par statut Jira : sections `To Review` (`Code review` inclus) et `Les autres`; dans « Mes revues », `Approved` clôt la file sauf fil personnel ouvert | ✅ done |
 | F18 | Affichage GitLab immédiat des revues, avec `Chargement Jira` par MR pendant l'enrichissement, publication incrémentale sans état vide puis regroupement Jira asynchrone | ✅ done |
@@ -37,6 +37,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F24 | Notes de version embarquées et visibles au survol de la version installée | ✅ done |
 | F25 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
 | F26 | Approbation bloquée jusqu'aux tests `build affected` verts ; auto review masquée après approbation de Claude | ✅ done |
+| F27 | Signal orange actionnable « À revalider · N fils » lorsqu'un commit de tête est postérieur au dernier commentaire personnel d'un fil non résolu | ✅ done |
 
 ### Actions
 
@@ -46,7 +47,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | A2 | `/rebase` via API GitLab (sans perdre les approbations) | ✅ done |
 | A3 | Rafraîchir manuellement | ✅ done |
 | A4 | Intervalle de poll réglable depuis l'UI (⚙️ → 15 s…24 h ou Jamais, défaut 10 min, redémarrage du scheduler) | ✅ done |
-| A5 | Approbation manuelle GitLab dans « Mes revues » et « À revoir » lorsque les threads de l'utilisateur sont résolus | ✅ done |
+| A5 | Approbation manuelle GitLab dans « Mes revues » et « À revoir » lorsque les threads créés par l'utilisateur ou auxquels il a participé sont résolus | ✅ done |
 | A6 | Masquer durablement une MR revue depuis l'interface | ✅ done |
 | A7 | Lancer les jobs GitLab manuels `build affected` et `auto review` lorsqu'ils sont jouables, sauf après approbation de Claude | ✅ done |
 

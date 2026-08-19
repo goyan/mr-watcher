@@ -152,9 +152,9 @@
 | Quoi | Résultat |
 |------|----------|
 | Suivi des MRs commentées | ✅ Onglet « Mes revues » dans la fenêtre principale et le panneau de barre de menus |
-| Signaux de décision | ✅ CI, conflits, retard de commits, approbations, threads personnels et autres threads ouverts |
-| Approbation manuelle | ✅ action GitLab confirmée, visible seulement sans thread personnel ouvert et sans approbation existante |
-| Navigation de thread | ✅ boutons « Mes fils » et « autres » avec survol, ouvrent l'ancre GitLab du premier fil non résolu correspondant |
+| Signaux de décision | ✅ CI, conflits, retard de commits, approbations, threads créés par l'utilisateur ou auxquels il a participé, et autres threads ouverts |
+| Approbation manuelle | ✅ action GitLab confirmée, visible seulement sans thread créé par l'utilisateur ou auquel il a participé encore ouvert, et sans approbation existante |
+| Navigation de thread | ✅ boutons « Mes fils » et « autres » avec survol, ouvrent l'ancre GitLab du premier fil non résolu correspondant ; « Mes fils » inclut les fils créés ou auxquels l'utilisateur a participé |
 | Cycle de vie des revues | ✅ suppression automatique si tous les commentaires personnels sont supprimés, croix de masquage persistante |
 | Approbation | ✅ statut `Approved` vert après approbation personnelle |
 | File à revoir | ✅ onglet `À revoir` pour les MRs des labels configurés (repli `Indigo, indigo`) ouvertes, non-Draft, d'autres auteurs, hors tickets Jira abandonnés et hors « Mes revues » |
@@ -175,3 +175,4 @@
 | Garde d'approbation | ✅ approbation après tests vérifiés/verts ; auto review indépendante dès que son job est manuel |
 | Tooltips | ✅ panels AppKit immédiats, ancrés aux contrôles, non rognés et non interactifs (le premier clic reste disponible) |
 | Polling | ✅ défaut 10 min ; options jusqu'à 24 h et « Jamais » (0 persistant), sans répétition automatique |
+| Fils à revalider | ✅ badge orange actionnable « À revalider · N fils » si le commit de tête est postérieur au dernier commentaire de l'utilisateur dans un fil personnel non résolu ; ouvre l'onglet GitLab des changements |

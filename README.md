@@ -33,6 +33,7 @@ Chaque ligne affiche :
 | `⬇N` | Commits de retard sur la branche cible |
 | `👍/✅ N/N` | Approbations humaines (bots filtrés) |
 | `💬N` | Threads non résolus |
+| `À revalider · N fils` | Un commit de tête est plus récent que votre dernier commentaire dans N fils personnels non résolus |
 | âge | Ancienneté de la MR |
 | `[🟡/🟢 statut]` | Statut Jira du ticket associé (via `acli`) |
 | `Chargement Jira` | Statut Jira de la MR en cours de récupération |
@@ -42,7 +43,11 @@ Chaque ligne affiche :
 - **↻ Actualiser la MR** — met à jour uniquement la MR, ses discussions,
   approbations, CI, conflits, retard et statut Jira.
 - **`Mes fils` / `autres`** — ouvre le premier thread non résolu correspondant
-  directement dans GitLab.
+  directement dans GitLab. Un fil personnel est créé par vous ou contient une
+  de vos réponses.
+- **`À revalider · N fils`** — visible dans les revues lorsqu'un commit de tête
+  est postérieur à votre dernier commentaire dans un fil personnel non résolu ;
+  ouvre l'onglet GitLab **Changes** pour revoir ou résoudre ces fils.
 - **Approuver** — disponible pour une MR ouverte, non-Draft, non déjà
   approuvée, sans fil personnel ouvert et seulement après vérification que
   `build affected` est vert.
@@ -107,15 +112,15 @@ partagez jamais.
 Pour préparer une release :
 
 ```bash
-bash scripts/release.sh 0.5.15
+bash scripts/release.sh 0.5.16
 ```
 
-Le script refuse un worktree/index non propre ou un tag local/distant `v0.5.15` déjà existant, puis
-reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.15.zip` pour Sparkle et
-`dist/MRWatcher-v0.5.15.dmg` pour l'installation manuelle, met `VERSION` à jour, signe
+Le script refuse un worktree/index non propre ou un tag local/distant `v0.5.16` déjà existant, puis
+reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.16.zip` pour Sparkle et
+`dist/MRWatcher-v0.5.16.dmg` pour l'installation manuelle, met `VERSION` à jour, signe
 `appcast.xml` et vérifie cette signature. Un préflight sans écriture est disponible avec
-`MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh 0.5.15`. Publiez d'abord les deux archives
-dans la release GitHub `v0.5.15`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
+`MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh 0.5.16`. Publiez d'abord les deux archives
+dans la release GitHub `v0.5.16`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
 disponible. Le ZIP et le feed doivent rester inchangés après signature.
 
 Les notes de release sont maintenues dans `RELEASE_NOTES.md`, embarquées dans

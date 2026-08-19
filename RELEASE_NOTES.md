@@ -1,18 +1,16 @@
-# MR Watcher v0.5.15
+# MR Watcher v0.5.16
 
 ## Ajouts
-- **Mes revues** regroupe les MRs commentées et celles que vous avez
-  approuvées.
-- Les MRs déjà approuvées, sans fil personnel ouvert, sont classées dans la
-  section **Approved**.
-- **À revoir** exclut les MRs déjà présentes dans **Mes revues**.
-- Chaque ticket affiche **Chargement Jira** pendant sa récupération asynchrone.
+- Un fil personnel inclut désormais tout fil créé par vous ou auquel vous avez
+  répondu.
+- Le badge orange actionnable **À revalider · N fils** signale les fils
+  personnels non résolus auxquels un commit de tête plus récent se rapporte.
 
 ## Corrections
-- Le statut Jira est publié dès la réponse `acli` : plus de blanc entre
-  **Chargement Jira** et `Code review` ou tout autre état Jira.
-- Les tickets Jira `TICKET ABANDONNÉ` sont retirés de **À revoir** après
-  enrichissement.
+- Les compteurs `Mes fils` / `autres`, le garde-fou d’approbation et la section
+  `Approved` prennent correctement en compte vos réponses à un fil existant.
+- Le signal de relecture compare les timestamps GitLab des notes et du commit
+  de tête, sans faux positif causé par `updated_at`.
 
 ## Validation
 - `swift build -c release`, `swift test` et installation locale validés.

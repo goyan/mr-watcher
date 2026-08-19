@@ -91,6 +91,7 @@ struct MRSummary: Identifiable, Codable {
     let createdAt: Date
     let mergedAt: Date?
     let headPipeline: EmbeddedPipeline?
+    let headSha: String?
     let divergedCommitsCount: Int?
     let hasConflicts: Bool
     let state: String  // "opened", "merged", "closed"
@@ -106,6 +107,7 @@ struct MRSummary: Identifiable, Codable {
         case createdAt = "created_at"
         case mergedAt = "merged_at"
         case headPipeline = "head_pipeline"
+        case headSha = "sha"
         case divergedCommitsCount = "diverged_commits_count"
         case hasConflicts = "has_conflicts"
     }
@@ -117,6 +119,7 @@ struct MRApprovals {
     let unresolvedThreads: Int
     let myUnresolvedThreads: Int
     let otherUnresolvedThreads: Int
+    let personalThreadsNeedingRevisit: Int
     let firstMyUnresolvedThreadNoteId: Int?
     let firstOtherUnresolvedThreadNoteId: Int?
     let isApprovedByMe: Bool
@@ -133,6 +136,12 @@ private struct DiscussionResponse: Codable {
         let resolvable: Bool
         let resolved: Bool?
         let author: Author
+        let createdAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case id, resolvable, resolved, author
+            case createdAt = "created_at"
+        }
     }
     struct Author: Codable { let username: String }
 }
@@ -150,6 +159,14 @@ private struct ApprovalsResponse: Codable {
     struct ApproverUser: Codable {
         let username: String
         let name: String?
+    }
+}
+
+private struct CommitResponse: Decodable {
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case createdAt = "created_at"
     }
 }
 
@@ -497,7 +514,11 @@ final class GitLabService {
         return MRKey(projectId: match.projectId, iid: match.iid)
     }
 
-    func fetchApprovals(projectId: Int, mrIid: Int) async throws -> MRApprovals {
+    func fetchApprovals(
+        projectId: Int,
+        mrIid: Int,
+        headSha: String? = nil
+    ) async throws -> MRApprovals {
         let (pat, username) = await MainActor.run { (config.gitlabPAT, config.gitlabUsername) }
         guard let pat, let username else { throw MRWatcherError.notConfigured }
         let host = await MainActor.run { config.gitlabHost }
@@ -538,6 +559,7 @@ final class GitLabService {
         }
         var myUnresolvedThreads = 0
         var otherUnresolvedThreads = 0
+        var personalThreadLastCommentDates: [Date] = []
         var firstMyUnresolvedThreadNoteId: Int?
         var firstOtherUnresolvedThreadNoteId: Int?
         for discussion in discussions {
@@ -548,8 +570,19 @@ final class GitLabService {
                 continue
             }
 
-            if firstNote.author.username.caseInsensitiveCompare(username) == .orderedSame {
+            let currentUserParticipated = discussion.notes.contains {
+                $0.author.username.caseInsensitiveCompare(username) == .orderedSame
+            }
+            if currentUserParticipated {
                 myUnresolvedThreads += 1
+                if let lastCommentDate = discussion.notes
+                    .filter({
+                        $0.author.username.caseInsensitiveCompare(username) == .orderedSame
+                    })
+                    .compactMap(\.createdAt)
+                    .max() {
+                    personalThreadLastCommentDates.append(lastCommentDate)
+                }
                 if firstMyUnresolvedThreadNoteId == nil {
                     firstMyUnresolvedThreadNoteId = firstNote.id
                 }
@@ -561,6 +594,23 @@ final class GitLabService {
             }
         }
 
+        let personalThreadsNeedingRevisit: Int
+        if let headSha = headSha?.trimmingCharacters(in: .whitespacesAndNewlines),
+           isValidCommitSHA(headSha),
+           !personalThreadLastCommentDates.isEmpty,
+           let commitCreatedAt = try? await fetchCommitCreatedAt(
+               projectId: projectId,
+               sha: headSha,
+               host: host,
+               pat: pat
+           ) {
+            personalThreadsNeedingRevisit = personalThreadLastCommentDates.filter {
+                commitCreatedAt > $0
+            }.count
+        } else {
+            personalThreadsNeedingRevisit = 0
+        }
+
         let given = humanApprovals.count
         let required = given + decoded.approvalsLeft
         return MRApprovals(
@@ -569,6 +619,7 @@ final class GitLabService {
             unresolvedThreads: myUnresolvedThreads + otherUnresolvedThreads,
             myUnresolvedThreads: myUnresolvedThreads,
             otherUnresolvedThreads: otherUnresolvedThreads,
+            personalThreadsNeedingRevisit: personalThreadsNeedingRevisit,
             firstMyUnresolvedThreadNoteId: firstMyUnresolvedThreadNoteId,
             firstOtherUnresolvedThreadNoteId: firstOtherUnresolvedThreadNoteId,
             isApprovedByMe: decoded.approvedBy.contains {
@@ -607,7 +658,7 @@ final class GitLabService {
 
             let (data, response) = try await session.data(for: request)
             try validateResponse(response)
-            discussions += try JSONDecoder().decode([DiscussionResponse].self, from: data)
+            discussions += try makeGitLabDateDecoder().decode([DiscussionResponse].self, from: data)
 
             guard let httpResponse = response as? HTTPURLResponse,
                   let nextPageHeader = httpResponse.value(forHTTPHeaderField: "X-Next-Page")?
@@ -621,6 +672,66 @@ final class GitLabService {
         }
 
         return discussions
+    }
+
+    private func fetchCommitCreatedAt(
+        projectId: Int,
+        sha: String,
+        host: String,
+        pat: String
+    ) async throws -> Date {
+        let url = try buildURL(
+            host: host,
+            path: "/api/v4/projects/\(projectId)/repository/commits/\(sha)",
+            query: [:]
+        )
+        var request = URLRequest(url: url)
+        request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+        return try makeGitLabDateDecoder().decode(CommitResponse.self, from: data).createdAt
+    }
+
+    private func makeGitLabDateDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let timestamp = try container.decode(String.self)
+            if let date = Self.gitLabDate(from: timestamp) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Timestamp GitLab invalide : \(timestamp)"
+            )
+        }
+        return decoder
+    }
+
+    private static func gitLabDate(from timestamp: String) -> Date? {
+        let standardFormatter = ISO8601DateFormatter()
+        standardFormatter.formatOptions = [.withInternetDateTime]
+        if let date = standardFormatter.date(from: timestamp) {
+            return date
+        }
+
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractionalFormatter.date(from: timestamp)
+    }
+
+    private func isValidCommitSHA(_ sha: String) -> Bool {
+        let trimmedSHA = sha.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (7...64).contains(trimmedSHA.count) else { return false }
+        return trimmedSHA.unicodeScalars.allSatisfy {
+            switch $0.value {
+            case 48...57, 65...70, 97...102:
+                true
+            default:
+                false
+            }
+        }
     }
 
     func fetchMRDetail(projectId: Int, mrIid: Int) async throws -> MRSummary {

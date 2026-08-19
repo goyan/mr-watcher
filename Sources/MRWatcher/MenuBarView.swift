@@ -643,6 +643,8 @@ struct MenuBarView: View {
                         .accessibilityLabel("Merge request approuvée")
                 }
 
+                revisitThreadsButton(for: mr, status: status)
+
                 personalThreadButton(for: mr, status: status, key: key)
 
                 otherThreadButton(for: mr, status: status, key: key)
@@ -664,6 +666,34 @@ struct MenuBarView: View {
     private func mrAccessibilityLabel(for mr: MRSummary) -> String {
         let author = mr.author.map { ", auteur \($0.fullDescription)" } ?? ""
         return "Ouvrir la merge request !\(mr.iid), \(mr.title)\(author), dans GitLab"
+    }
+
+    @ViewBuilder
+    private func revisitThreadsButton(
+        for mr: MRSummary,
+        status: MRApprovals
+    ) -> some View {
+        if status.personalThreadsNeedingRevisit > 0 {
+            let threadCount = status.personalThreadsNeedingRevisit
+            Button {
+                openURL("\(mr.webUrl)/changes")
+            } label: {
+                Label(
+                    "À revalider · \(threadCount)",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.orange)
+            .help("Un commit est plus récent que votre dernier commentaire : ouvrir les changements")
+            .immediateTooltip("Un commit est plus récent que votre dernier commentaire : ouvrir les changements")
+            .accessibilityLabel(
+                "\(threadCount) fil\(threadCount == 1 ? "" : "s") à revalider : ouvrir les changements de !\(mr.iid) dans GitLab"
+            )
+        }
     }
 
     @ViewBuilder

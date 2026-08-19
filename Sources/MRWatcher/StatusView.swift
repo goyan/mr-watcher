@@ -749,6 +749,8 @@ struct StatusView: View {
                         .accessibilityLabel("Merge request approuvée")
                 }
 
+                revisitThreadsButton(for: mr, status: status)
+
                 personalThreadButton(for: mr, status: status, key: key)
 
                 otherThreadButton(for: mr, status: status, key: key)
@@ -782,6 +784,34 @@ struct StatusView: View {
         }
         .font(.system(.callout, design: .monospaced))
         .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private func revisitThreadsButton(
+        for mr: MRSummary,
+        status: MRApprovals
+    ) -> some View {
+        if status.personalThreadsNeedingRevisit > 0 {
+            let threadCount = status.personalThreadsNeedingRevisit
+            Button {
+                openURL("\(mr.webUrl)/changes")
+            } label: {
+                Label(
+                    "À revalider · \(threadCount) fil\(threadCount == 1 ? "" : "s")",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.orange)
+            .help("Un commit est plus récent que votre dernier commentaire : ouvrir les changements")
+            .immediateTooltip("Un commit est plus récent que votre dernier commentaire : ouvrir les changements")
+            .accessibilityLabel(
+                "\(threadCount) fil\(threadCount == 1 ? "" : "s") à revalider : ouvrir les changements de !\(mr.iid) dans GitLab"
+            )
+        }
     }
 
     @ViewBuilder
