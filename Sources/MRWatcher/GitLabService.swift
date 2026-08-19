@@ -56,17 +56,19 @@ struct MRAuthor: Codable {
         let nameParts = name?
             .split(whereSeparator: { $0.isWhitespace })
             .map(String.init) ?? []
-        if let firstName = nameParts.first {
-            guard let lastName = nameParts.dropFirst().first else {
-                return firstName.capitalized
-            }
+        if let firstName = nameParts.first,
+           let lastName = nameParts.dropFirst().first {
             return "\(firstName.capitalized) \(lastName.prefix(1).uppercased())."
         }
 
-        let usernameParts = username.split { ".-_".contains($0) }
+        let usernameParts = username.split { "._".contains($0) }
         guard let firstName = usernameParts.first else { return username }
         guard let lastName = usernameParts.dropFirst().first else {
-            return String(firstName).capitalized
+            let hyphenParts = firstName.split(separator: "-")
+            guard let hyphenatedLastName = hyphenParts.dropFirst().first else {
+                return String(firstName).capitalized
+            }
+            return "\(String(hyphenParts[0]).capitalized) \(hyphenatedLastName.prefix(1).uppercased())."
         }
         return "\(String(firstName).capitalized) \(lastName.prefix(1).uppercased())."
     }

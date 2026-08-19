@@ -161,7 +161,7 @@
 | Priorisation Jira | ✅ groupes `To Review` puis `Les autres` dans les onglets de revue, avec statut texte visible |
 | Enrichissement Jira différé | ✅ données GitLab publiées immédiatement ; les statuts Jira reclassent les listes à leur arrivée, avec rejet des réponses périmées |
 | Cohérence des vues | ✅ cartes « Mes MRs » alignées sur les revues ; pied « À revoir » détaille total Indigo, `To Review` et `Les autres` |
-| Finitions des cartes | ✅ chargement initial explicite, ticket Jira près de l’identification, auteur court `Prénom N.` dans toutes les listes |
+| Finitions des cartes | ✅ chargement initial explicite, ticket Jira près de l’identification, auteur court `Prénom N.` dans toutes les listes, y compris pour les pseudos GitLab techniques |
 | Découverte et charge | ✅ événements GitLab paginés et bornés, résolution des titres par lots de 8, MRs ouvertes persistées, rafraîchissement équitable par rotation |
 | Robustesse | ✅ conservation du dernier état lors d'une erreur transitoire, éviction des MRs fermées ou introuvables |
 | Validation technique | ✅ `swift build -c release` et `swift test` (5 tests), application installée et 6 revues réelles visibles dans les deux vues |
