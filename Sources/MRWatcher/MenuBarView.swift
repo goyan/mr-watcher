@@ -483,6 +483,7 @@ struct MenuBarView: View {
                                 Text(author.shortDisplayName)
                                     .font(.caption.weight(.semibold))
                                     .help("Auteur : \(author.fullDescription)")
+                                    .immediateTooltip("Auteur : \(author.fullDescription)")
                             }
                             Text(projectName(for: mr))
                                 .font(.caption)
@@ -550,6 +551,7 @@ struct MenuBarView: View {
                             Text(author.shortDisplayName)
                                 .font(.caption.weight(.semibold))
                                 .help("Auteur : \(author.fullDescription)")
+                                .immediateTooltip("Auteur : \(author.fullDescription)")
                         }
                         Text(projectName(for: mr))
                             .font(.caption)
@@ -634,6 +636,7 @@ struct MenuBarView: View {
                     tone: .attention
                 )
                     .help("\(behind) commit\(behind == 1 ? "" : "s") de retard")
+                    .immediateTooltip("\(behind) commit\(behind == 1 ? "" : "s") de retard")
             }
 
             SemanticTag(
@@ -642,6 +645,7 @@ struct MenuBarView: View {
                 tone: .neutral
             )
                 .help(mr.state == "merged" ? "Date de merge" : "Date de création")
+                .immediateTooltip(mr.state == "merged" ? "Date de merge" : "Date de création")
         }
         .font(.caption2)
     }
@@ -663,6 +667,7 @@ struct MenuBarView: View {
                     tone: .critical
                 )
                     .help("Conflit de merge")
+                    .immediateTooltip("Conflit de merge")
                     .accessibilityLabel("Conflit de merge")
             }
 
@@ -673,6 +678,7 @@ struct MenuBarView: View {
                     tone: .attention
                 )
                     .help("\(behind) commit\(behind == 1 ? "" : "s") de retard")
+                    .immediateTooltip("\(behind) commit\(behind == 1 ? "" : "s") de retard")
             }
 
             if let status = statuses[key] {
@@ -682,6 +688,7 @@ struct MenuBarView: View {
                     tone: status.given >= status.required ? .positive : .neutral
                 )
                 .help("\(status.given) approbation\(status.given == 1 ? "" : "s") sur \(status.required)")
+                .immediateTooltip("\(status.given) approbation\(status.given == 1 ? "" : "s") sur \(status.required)")
 
                 if status.isApprovedByMe {
                     SemanticTag(
@@ -690,6 +697,7 @@ struct MenuBarView: View {
                         tone: .positive
                     )
                     .help("Vous avez approuvé cette merge request")
+                    .immediateTooltip("Vous avez approuvé cette merge request")
                     .accessibilityLabel("Merge request approuvée")
                 }
 
@@ -701,7 +709,8 @@ struct MenuBarView: View {
             }
 
             SemanticTag(title: ageString(mr.createdAt), systemImage: "clock", tone: .neutral)
-                .help("Date de creation")
+                .help("Date de création")
+                .immediateTooltip("Date de création")
         }
         .font(.caption2)
     }
@@ -762,9 +771,9 @@ struct MenuBarView: View {
                     )
             }
             .buttonStyle(.plain)
-            .help("Ouvrir votre premier fil non resolu dans GitLab")
-            .immediateTooltip("Ouvrir votre premier fil non resolu dans GitLab")
-            .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non resolus dans GitLab")
+            .help("Ouvrir votre premier fil non résolu dans GitLab")
+            .immediateTooltip("Ouvrir votre premier fil non résolu dans GitLab")
+            .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non résolus dans GitLab")
             .onHover { isHovering in
                 hoveredPersonalThread = isHovering ? key : nil
             }
@@ -774,7 +783,8 @@ struct MenuBarView: View {
                 systemImage: "bubble.left.fill",
                 tone: status.myUnresolvedThreads > 0 ? .accent : .neutral
             )
-                .help("\(status.myUnresolvedThreads) fil\(status.myUnresolvedThreads == 1 ? "" : "s") vous concernant non resolu\(status.myUnresolvedThreads == 1 ? "" : "s")")
+                .help("\(status.myUnresolvedThreads) fil\(status.myUnresolvedThreads == 1 ? "" : "s") vous concernant non résolu\(status.myUnresolvedThreads == 1 ? "" : "s")")
+                .immediateTooltip("\(status.myUnresolvedThreads) fil\(status.myUnresolvedThreads == 1 ? "" : "s") vous concernant non résolu\(status.myUnresolvedThreads == 1 ? "" : "s")")
         }
     }
 
@@ -800,9 +810,9 @@ struct MenuBarView: View {
                     )
             }
             .buttonStyle(.plain)
-            .help("Ouvrir le premier fil non resolu des autres dans GitLab")
-            .immediateTooltip("Ouvrir le premier fil non resolu des autres dans GitLab")
-            .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non resolus des autres dans GitLab")
+            .help("Ouvrir le premier fil non résolu des autres dans GitLab")
+            .immediateTooltip("Ouvrir le premier fil non résolu des autres dans GitLab")
+            .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non résolus des autres dans GitLab")
             .onHover { isHovering in
                 hoveredOtherThread = isHovering ? key : nil
             }
@@ -812,7 +822,8 @@ struct MenuBarView: View {
                 systemImage: "bubble.left.and.bubble.right.fill",
                 tone: status.otherUnresolvedThreads > 0 ? .attention : .neutral
             )
-                .help("\(status.otherUnresolvedThreads) autre\(status.otherUnresolvedThreads == 1 ? "" : "s") fil\(status.otherUnresolvedThreads == 1 ? "" : "s") non resolu\(status.otherUnresolvedThreads == 1 ? "" : "s")")
+                .help("\(status.otherUnresolvedThreads) autre\(status.otherUnresolvedThreads == 1 ? "" : "s") fil\(status.otherUnresolvedThreads == 1 ? "" : "s") non résolu\(status.otherUnresolvedThreads == 1 ? "" : "s")")
+                .immediateTooltip("\(status.otherUnresolvedThreads) autre\(status.otherUnresolvedThreads == 1 ? "" : "s") fil\(status.otherUnresolvedThreads == 1 ? "" : "s") non résolu\(status.otherUnresolvedThreads == 1 ? "" : "s")")
         }
     }
 
@@ -822,21 +833,27 @@ struct MenuBarView: View {
         case "success":
             SemanticTag(title: "CI OK", systemImage: "checkmark.circle.fill", tone: .positive)
                 .help("CI réussie")
+                .immediateTooltip("CI réussie")
         case "failed":
             SemanticTag(title: "CI KO", systemImage: "xmark.circle.fill", tone: .critical)
                 .help("CI échouée")
+                .immediateTooltip("CI échouée")
         case "running":
             SemanticTag(title: "CI en cours", systemImage: "arrow.triangle.2.circlepath", tone: .attention)
                 .help("CI en cours")
+                .immediateTooltip("CI en cours")
         case "pending":
             SemanticTag(title: "CI attente", systemImage: "clock.fill", tone: .attention)
                 .help("CI en attente")
+                .immediateTooltip("CI en attente")
         case "canceled":
             SemanticTag(title: "CI annulée", systemImage: "minus.circle.fill", tone: .neutral)
                 .help("CI annulée")
+                .immediateTooltip("CI annulée")
         case .some:
             SemanticTag(title: "CI ?", systemImage: "questionmark.circle", tone: .neutral)
                 .help("État CI inconnu")
+                .immediateTooltip("État CI inconnu")
         case .none:
             SemanticTag(title: "CI n/a", systemImage: "minus", tone: .neutral)
         }
@@ -852,6 +869,7 @@ struct MenuBarView: View {
                 tone: approval.given >= approval.required ? .positive : .neutral
             )
             .help("\(approval.given) approbation\(approval.given == 1 ? "" : "s") sur \(approval.required)")
+            .immediateTooltip("\(approval.given) approbation\(approval.given == 1 ? "" : "s") sur \(approval.required)")
 
             if approval.unresolvedThreads > 0 {
                 SemanticTag(
@@ -860,6 +878,7 @@ struct MenuBarView: View {
                     tone: .attention
                 )
                     .help("\(approval.unresolvedThreads) discussion\(approval.unresolvedThreads == 1 ? "" : "s") non résolue\(approval.unresolvedThreads == 1 ? "" : "s")")
+                    .immediateTooltip("\(approval.unresolvedThreads) discussion\(approval.unresolvedThreads == 1 ? "" : "s") non résolue\(approval.unresolvedThreads == 1 ? "" : "s")")
             }
         }
     }
@@ -1105,26 +1124,28 @@ struct MenuBarView: View {
 
             Spacer()
 
-            Text(footerStatus)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .help(ReleaseNotes.summary)
-                .immediateTooltip(ReleaseNotes.summary)
-                .accessibilityLabel("Version \(appVersion). \(ReleaseNotes.summary)")
-
-            if updaterController.updateAvailable {
-                Button {
-                    updaterController.checkForUpdates()
-                } label: {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .foregroundStyle(.orange)
+            // Toujours cliquable, même motif que `StatusView.footer` : un élément qui
+            // réagit au survol (notes de version) et ignore le clic est un mensonge
+            // d'interface. L'icône orange reste conditionnée à `updateAvailable` — elle
+            // signale une mise à jour, pas la cliquabilité.
+            Button {
+                updaterController.checkForUpdates()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(footerStatus)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if updaterController.updateAvailable {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .foregroundStyle(.orange)
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
-                .immediateTooltip("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
-                .accessibilityLabel("Installer la mise à jour disponible")
             }
+            .buttonStyle(.plain)
+            .help(versionTooltip)
+            .immediateTooltip(versionTooltip)
+            .accessibilityLabel(versionAccessibilityLabel)
 
             Spacer()
 
@@ -1184,6 +1205,24 @@ struct MenuBarView: View {
             return "\(appVersion) · \(lastPoll.formatted(date: .omitted, time: .shortened))"
         }
         return appVersion
+    }
+
+    /// Le survol doit dire ce que fera le clic, dans les deux états — mêmes libellés
+    /// que `StatusView.versionTooltip`/`versionAccessibilityLabel`.
+    private var versionTooltip: String {
+        if updaterController.updateAvailable {
+            "Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)"
+        } else {
+            "Rechercher les mises à jour\n\n\(ReleaseNotes.summary)"
+        }
+    }
+
+    private var versionAccessibilityLabel: String {
+        if updaterController.updateAvailable {
+            "Version \(appVersion). Mise à jour disponible. Cliquer pour installer."
+        } else {
+            "Version \(appVersion). \(ReleaseNotes.summary) Cliquer pour rechercher les mises à jour."
+        }
     }
 
     private func isActionable(_ mr: MRSummary) -> Bool {
@@ -1346,7 +1385,7 @@ struct MenuBarView: View {
                 store.lastError = "Approbation !\(mr.iid) : \(error.localizedDescription)"
                 NotificationService.shared.notify(
                     identifier: "review-approval-\(mr.projectId)-\(mr.iid)",
-                    title: "Approbation echouee - !\(mr.iid)",
+                    title: "Approbation échouée — !\(mr.iid)",
                     body: error.localizedDescription,
                     url: mr.webUrl
                 )

@@ -88,6 +88,24 @@ struct StatusView: View {
         return "v\(version)"
     }
 
+    /// Le survol doit dire ce que fera le clic, dans les deux états — sinon le tooltip
+    /// ment autant que l'ancien `Text` inerte qu'il remplaçait.
+    private var versionTooltip: String {
+        if updaterController.updateAvailable {
+            "Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)"
+        } else {
+            "Rechercher les mises à jour\n\n\(ReleaseNotes.summary)"
+        }
+    }
+
+    private var versionAccessibilityLabel: String {
+        if updaterController.updateAvailable {
+            "Version \(appVersion). Mise à jour disponible. Cliquer pour installer."
+        } else {
+            "Version \(appVersion). \(ReleaseNotes.summary) Cliquer pour rechercher les mises à jour."
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -561,31 +579,29 @@ struct StatusView: View {
 
             Spacer()
 
-            if updaterController.updateAvailable {
-                Button {
-                    updaterController.checkForUpdates()
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(appVersion)
-                            .foregroundStyle(.secondary)
+            // Toujours cliquable, même sans mise à jour connue : cet élément réagit déjà
+            // au survol (notes de version), un contrôle qui répond au survol et ignore le
+            // clic est un mensonge d'interface — même raisonnement que le tag Jira non
+            // cliquable quand l'URL est vide. Seule la pastille orange reste conditionnée
+            // à `updateAvailable` : elle signale une mise à jour, pas la cliquabilité.
+            Button {
+                updaterController.checkForUpdates()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(appVersion)
+                        .foregroundStyle(.secondary)
+                    if updaterController.updateAvailable {
                         Circle()
                             .fill(.orange)
                             .frame(width: 6, height: 6)
                     }
                 }
-                .buttonStyle(.plain)
-                .font(.callout)
-                .help("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
-                .immediateTooltip("Mise à jour disponible — cliquer pour installer\n\n\(ReleaseNotes.summary)")
-                .accessibilityLabel("Version \(appVersion). Mise à jour disponible.")
-            } else {
-                Text(appVersion)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .help(ReleaseNotes.summary)
-                    .immediateTooltip(ReleaseNotes.summary)
-                    .accessibilityLabel("Version \(appVersion). \(ReleaseNotes.summary)")
             }
+            .buttonStyle(.plain)
+            .font(.callout)
+            .help(versionTooltip)
+            .immediateTooltip(versionTooltip)
+            .accessibilityLabel(versionAccessibilityLabel)
             Text("·")
                 .foregroundStyle(.tertiary)
             Text("Actualisation : \(intervalDescription(pollIntervalSeconds))")
@@ -682,7 +698,7 @@ struct StatusView: View {
                 store.lastError = "Approbation !\(mr.iid) : \(error.localizedDescription)"
                 NotificationService.shared.notify(
                     identifier: "review-approval-\(mr.projectId)-\(mr.iid)",
-                    title: "Approbation echouee - !\(mr.iid)",
+                    title: "Approbation échouée — !\(mr.iid)",
                     body: error.localizedDescription,
                     url: mr.webUrl
                 )
