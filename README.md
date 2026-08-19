@@ -194,14 +194,23 @@ Variables lues depuis `~/.env` :
 | Variable | Description |
 |----------|-------------|
 | `GITLAB_PAT` | Personal Access Token GitLab (scopes: `api`, `read_user`) |
-| `GITLAB_HOST` | Host GitLab (ex: `gitlab.factory.fonciamillenium.net`) |
-| `GITLAB_USERNAME` | Username GitLab (ex: `herve.meunier.externe`) |
+| `GITLAB_HOST` | Host GitLab (ex: `gitlab.exemple.com`) |
+| `GITLAB_USERNAME` | Username GitLab (ex: `prenom.nom`) |
 
 Le statut Jira est récupéré via `acli` (Atlassian CLI) — aucune configuration supplémentaire si `acli` est déjà authentifié. Si l'outil est absent ou échoue, GitLab continue de fonctionner et l'application affiche `Jira indisponible`; le détail assaini est disponible au survol.
 
-Les labels de **À revoir** sont enregistrés localement depuis **⚙️ → Configurer…**.
-Les valeurs sont séparées par des virgules ou des retours à la ligne et la casse
-est conservée, car GitLab distingue les labels `Indigo` et `indigo`.
+Trois réglages supplémentaires sont enregistrés localement depuis
+**⚙️ → Configurer…** :
+
+- **Labels à surveiller** — alimentent l'onglet **À revoir**. Valeurs séparées
+  par des virgules ou des retours à la ligne ; la casse est conservée, car
+  GitLab distingue `Equipe` et `equipe`.
+- **URL Jira** — la base de votre instance, par exemple
+  `https://votre-org.atlassian.net`. Laissée vide, le ticket reste affiché mais
+  n'est pas cliquable : l'application n'invente pas d'URL.
+- **Préfixe de ticket** — le préfixe cherché dans le nom de branche puis dans le
+  titre de la MR pour en déduire le ticket (`PROD` par défaut, donnant
+  `PROD-12345`).
 
 ## Intervalle de poll
 

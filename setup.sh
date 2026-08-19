@@ -35,8 +35,8 @@ touch "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 prompt_var GITLAB_PAT "GitLab Personal Access Token (scope minimal : read_api)" true
-prompt_var GITLAB_HOST "GitLab host (ex: gitlab.factory.fonciamillenium.net)"
-prompt_var GITLAB_USERNAME "Ton username GitLab (ex: herve.meunier.externe)"
+prompt_var GITLAB_HOST "GitLab host (ex: gitlab.exemple.com)"
+prompt_var GITLAB_USERNAME "Ton username GitLab (ex: prenom.nom)"
 
 echo "✓ Configuré dans $ENV_FILE (permissions 600)"
 echo "Relance MRWatcher pour prendre en compte les changements."
