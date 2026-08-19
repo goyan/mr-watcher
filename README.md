@@ -21,6 +21,11 @@ enrichit les données après le premier affichage GitLab afin de ne pas bloquer
 l'interface. La MR interrogée affiche **Chargement Jira** jusqu'à la
 publication immédiate de son statut, sans état vide intermédiaire.
 
+Chaque ligne affiche des tags sémantiques compacts, identiques dans la fenêtre
+principale et le panneau de barre de menus : vert pour les états positifs,
+orange pour l'attention, rouge pour les blocages et gris pour les états
+neutres. Chaque tag conserve son icône et son libellé court.
+
 Chaque ligne affiche :
 
 | Indicateur | Signification |
@@ -28,15 +33,15 @@ Chaque ligne affiche :
 | `!IID` | Numéro de la MR (cliquable → ouvre GitLab) |
 | `[projet]` | Repo : millenium · terragrunt · cortex… |
 | `PROD-XXXXX` | Ticket Jira extrait de la branche ou du titre |
-| CI | ✅ success · ❌ failed · 🔄 running · ⏳ pending |
-| `⚠️` | Conflit de merge |
-| `⬇N` | Commits de retard sur la branche cible |
-| `👍/✅ N/N` | Approbations humaines (bots filtrés) |
-| `💬N` | Threads non résolus |
+| `CI OK` / `CI KO` / `CI en cours` | État du pipeline |
+| `Conflit` | Conflit de merge |
+| `N retards` | Commits de retard sur la branche cible |
+| `N/N appro.` | Approbations humaines (bots filtrés) |
+| `N fils` | Threads non résolus |
 | `À revalider · N fils` | Un commit de tête est plus récent que votre dernier commentaire dans N fils personnels non résolus |
 | âge | Ancienneté de la MR |
-| `[🟡/🟢 statut]` | Statut Jira du ticket associé (via `acli`) |
-| `Chargement Jira` | Statut Jira de la MR en cours de récupération |
+| `statut Jira` | Statut Jira du ticket associé (via `acli`) |
+| `Jira...` | Statut Jira de la MR en cours de récupération |
 
 ### Actions
 
@@ -47,7 +52,8 @@ Chaque ligne affiche :
   de vos réponses.
 - **`À revalider · N fils`** — visible dans les revues lorsqu'un commit de tête
   est postérieur à votre dernier commentaire dans un fil personnel non résolu ;
-  ouvre l'onglet GitLab **Changes** pour revoir ou résoudre ces fils.
+  ouvre directement le premier fil personnel nécessitant une revalidation dans
+  GitLab.
 - **Approuver** — disponible pour une MR ouverte, non-Draft, non déjà
   approuvée, sans fil personnel ouvert et seulement après vérification que
   `build affected` est vert.
@@ -62,8 +68,9 @@ Chaque ligne affiche :
 - **⚙️ Configurer…** — ouvre le panneau de configuration
 - **⚙️ Labels à surveiller** — configure les labels GitLab de la file
   **À revoir** (par défaut : `Indigo, indigo`).
-- **⚙️ Intervalle d'actualisation** — choisit la période de poll de 15 s à
-  24 h, ou **Jamais** ; l'actualisation manuelle reste toujours disponible.
+- **⚙️ Intervalle d'actualisation** — réglé à 10 min par défaut, choisit une
+  période de 15 s à 24 h, ou **Jamais** ; l'actualisation manuelle reste
+  toujours disponible.
 - **Rechercher les mises à jour…** — vérifie et installe une release Sparkle signée
 
 Les actions affichent un tooltip immédiat au survol. Les notes de la release
@@ -109,19 +116,17 @@ La clé privée est stockée dans le trousseau de connexion macOS sous le compte
 `com.goyan.mrwatcher.updates`. Ne la supprimez pas, ne la mettez jamais dans le dépôt et ne la
 partagez jamais.
 
-Pour préparer une release :
+Le runbook complet de préparation, signature, publication GitHub et vérification
+post-release est dans [docs/RELEASE.md](docs/RELEASE.md). Pour un préflight :
 
 ```bash
-bash scripts/release.sh 0.5.16
+MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh <version>
 ```
 
-Le script refuse un worktree/index non propre ou un tag local/distant `v0.5.16` déjà existant, puis
-reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.16.zip` pour Sparkle et
-`dist/MRWatcher-v0.5.16.dmg` pour l'installation manuelle, met `VERSION` à jour, signe
-`appcast.xml` et vérifie cette signature. Un préflight sans écriture est disponible avec
-`MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh 0.5.16`. Publiez d'abord les deux archives
-dans la release GitHub `v0.5.16`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
-disponible. Le ZIP et le feed doivent rester inchangés après signature.
+Le script refuse un worktree/index non propre ou un tag local/distant déjà
+existant, puis reconstruit SwiftPM depuis un état propre. Il produit un ZIP
+Sparkle et un DMG, met `VERSION` à jour, signe `appcast.xml` et vérifie cette
+signature.
 
 Les notes de release sont maintenues dans `RELEASE_NOTES.md`, embarquées dans
 l'application et publiées avec la release GitHub. Elles doivent décrire les

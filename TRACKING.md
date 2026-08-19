@@ -2,7 +2,7 @@
 
 ## État actuel
 
-- **Version** : 0.5.10
+- **Version** : 0.5.17
 - **Build** : ✅ `swift build -c release`, bundle Sparkle et archives signées publiés
 - **Installé** : `/Applications/MRWatcher.app` (codesign ad-hoc)
 - **PAT** : configuré dans `~/.env` (token glab Millenium)
@@ -175,4 +175,6 @@
 | Garde d'approbation | ✅ approbation après tests vérifiés/verts ; auto review indépendante dès que son job est manuel |
 | Tooltips | ✅ panels AppKit immédiats, ancrés aux contrôles, non rognés et non interactifs (le premier clic reste disponible) |
 | Polling | ✅ défaut 10 min ; options jusqu'à 24 h et « Jamais » (0 persistant), sans répétition automatique |
-| Fils à revalider | ✅ badge orange actionnable « À revalider · N fils » si le commit de tête est postérieur au dernier commentaire de l'utilisateur dans un fil personnel non résolu ; ouvre l'onglet GitLab des changements |
+| Fils à revalider | ✅ badge orange actionnable « À revalider · N fils » si le commit de tête est postérieur au dernier commentaire de l'utilisateur dans un fil personnel non résolu ; ouvre le premier fil personnel à revalider dans GitLab |
+| Tags de statut | ✅ tags sémantiques communs pour Jira, CI, conflits, retards, approbations et fils, avec palette vert/orange/rouge/gris cohérente dans la fenêtre et le panneau de barre de menus |
+| Lien « À revalider » | ✅ ouvre directement la première note d’un fil personnel nécessitant une revalidation (`#note_<id>`), seulement lorsqu'elle est disponible |

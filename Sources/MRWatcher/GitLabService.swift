@@ -121,6 +121,7 @@ struct MRApprovals {
     let otherUnresolvedThreads: Int
     let personalThreadsNeedingRevisit: Int
     let firstMyUnresolvedThreadNoteId: Int?
+    let firstPersonalThreadNeedingRevisitNoteId: Int?
     let firstOtherUnresolvedThreadNoteId: Int?
     let isApprovedByMe: Bool
     let isApprovedByClaude: Bool
@@ -559,7 +560,7 @@ final class GitLabService {
         }
         var myUnresolvedThreads = 0
         var otherUnresolvedThreads = 0
-        var personalThreadLastCommentDates: [Date] = []
+        var personalUnresolvedThreads: [(firstNoteId: Int, lastCommentDate: Date)] = []
         var firstMyUnresolvedThreadNoteId: Int?
         var firstOtherUnresolvedThreadNoteId: Int?
         for discussion in discussions {
@@ -581,7 +582,9 @@ final class GitLabService {
                     })
                     .compactMap(\.createdAt)
                     .max() {
-                    personalThreadLastCommentDates.append(lastCommentDate)
+                    personalUnresolvedThreads.append(
+                        (firstNoteId: firstNote.id, lastCommentDate: lastCommentDate)
+                    )
                 }
                 if firstMyUnresolvedThreadNoteId == nil {
                     firstMyUnresolvedThreadNoteId = firstNote.id
@@ -595,20 +598,24 @@ final class GitLabService {
         }
 
         let personalThreadsNeedingRevisit: Int
+        let firstPersonalThreadNeedingRevisitNoteId: Int?
         if let headSha = headSha?.trimmingCharacters(in: .whitespacesAndNewlines),
            isValidCommitSHA(headSha),
-           !personalThreadLastCommentDates.isEmpty,
+           !personalUnresolvedThreads.isEmpty,
            let commitCreatedAt = try? await fetchCommitCreatedAt(
                projectId: projectId,
                sha: headSha,
                host: host,
                pat: pat
            ) {
-            personalThreadsNeedingRevisit = personalThreadLastCommentDates.filter {
-                commitCreatedAt > $0
-            }.count
+            let threadsNeedingRevisit = personalUnresolvedThreads.filter {
+                commitCreatedAt > $0.lastCommentDate
+            }
+            personalThreadsNeedingRevisit = threadsNeedingRevisit.count
+            firstPersonalThreadNeedingRevisitNoteId = threadsNeedingRevisit.first?.firstNoteId
         } else {
             personalThreadsNeedingRevisit = 0
+            firstPersonalThreadNeedingRevisitNoteId = nil
         }
 
         let given = humanApprovals.count
@@ -621,6 +628,7 @@ final class GitLabService {
             otherUnresolvedThreads: otherUnresolvedThreads,
             personalThreadsNeedingRevisit: personalThreadsNeedingRevisit,
             firstMyUnresolvedThreadNoteId: firstMyUnresolvedThreadNoteId,
+            firstPersonalThreadNeedingRevisitNoteId: firstPersonalThreadNeedingRevisitNoteId,
             firstOtherUnresolvedThreadNoteId: firstOtherUnresolvedThreadNoteId,
             isApprovedByMe: decoded.approvedBy.contains {
                 $0.user.username.caseInsensitiveCompare(username) == .orderedSame

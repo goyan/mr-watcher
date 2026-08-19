@@ -569,16 +569,14 @@ struct MenuBarView: View {
             Button {
                 openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
             } label: {
-                Label(
-                    store.jiraStatuses[key].map { "\(ticket) · \($0.name)" }
-                        ?? (store.jiraLoadingMRKeys.contains(key)
-                            ? "\(ticket) · Chargement Jira"
-                            : ticket),
-                    systemImage: "ticket"
+                SemanticTag(
+                    title: store.jiraStatuses[key].map { "\(ticket) · \($0.name)" }
+                        ?? (store.jiraLoadingMRKeys.contains(key) ? "\(ticket) · Jira..." : ticket),
+                    systemImage: "ticket",
+                    tone: jiraTone(for: mr)
                 )
             }
             .buttonStyle(.plain)
-            .foregroundStyle(jiraColor(for: mr))
             .help("Ouvrir \(ticket) dans Jira")
             .immediateTooltip("Ouvrir \(ticket) dans Jira")
             .accessibilityLabel("Ouvrir le ticket \(ticket) dans Jira")
@@ -586,23 +584,28 @@ struct MenuBarView: View {
     }
 
     private func metadataRow(for mr: MRSummary) -> some View {
-        HStack(spacing: 7) {
+        TagFlowLayout {
             jiraButton(for: mr)
             pipelineMetadata(for: mr)
             approvalMetadata(for: mr)
 
             if let behind = mr.divergedCommitsCount, behind > 0 {
-                Label("\(behind)", systemImage: "arrow.down")
-                    .foregroundStyle(.orange)
+                SemanticTag(
+                    title: behindTagTitle(behind),
+                    systemImage: "arrow.down",
+                    tone: .attention
+                )
                     .help("\(behind) commit\(behind == 1 ? "" : "s") de retard")
             }
 
-            Label(ageString(mr.state == "merged" ? mr.mergedAt ?? mr.createdAt : mr.createdAt), systemImage: "clock")
-                .foregroundStyle(.secondary)
+            SemanticTag(
+                title: ageString(mr.state == "merged" ? mr.mergedAt ?? mr.createdAt : mr.createdAt),
+                systemImage: "clock",
+                tone: .neutral
+            )
                 .help(mr.state == "merged" ? "Date de merge" : "Date de création")
         }
         .font(.caption2)
-        .lineLimit(1)
     }
 
     @ViewBuilder
@@ -611,36 +614,45 @@ struct MenuBarView: View {
         key: MRKey,
         statuses: [MRKey: MRApprovals]
     ) -> some View {
-        HStack(spacing: 7) {
+        TagFlowLayout {
             jiraButton(for: mr)
             pipelineMetadata(for: mr)
 
             if mr.hasConflicts {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                SemanticTag(
+                    title: "Conflit",
+                    systemImage: "exclamationmark.triangle.fill",
+                    tone: .critical
+                )
                     .help("Conflit de merge")
                     .accessibilityLabel("Conflit de merge")
             }
 
             if let behind = mr.divergedCommitsCount, behind > 0 {
-                Label("\(behind)", systemImage: "arrow.down")
-                    .foregroundStyle(.orange)
+                SemanticTag(
+                    title: behindTagTitle(behind),
+                    systemImage: "arrow.down",
+                    tone: .attention
+                )
                     .help("\(behind) commit\(behind == 1 ? "" : "s") de retard")
             }
 
             if let status = statuses[key] {
-                Label(
-                    "\(status.given)/\(status.required)",
-                    systemImage: status.given >= status.required ? "checkmark.circle.fill" : "hand.thumbsup"
+                SemanticTag(
+                    title: "\(status.given)/\(status.required) appro.",
+                    systemImage: status.given >= status.required ? "checkmark.circle.fill" : "hand.thumbsup",
+                    tone: status.given >= status.required ? .positive : .neutral
                 )
-                .foregroundStyle(status.given >= status.required ? .green : .secondary)
                 .help("\(status.given) approbation\(status.given == 1 ? "" : "s") sur \(status.required)")
 
                 if status.isApprovedByMe {
-                    Label("Approved", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .help("Vous avez approuvé cette merge request")
-                        .accessibilityLabel("Merge request approuvée")
+                    SemanticTag(
+                        title: "Approved",
+                        systemImage: "checkmark.circle.fill",
+                        tone: .positive
+                    )
+                    .help("Vous avez approuvé cette merge request")
+                    .accessibilityLabel("Merge request approuvée")
                 }
 
                 revisitThreadsButton(for: mr, status: status)
@@ -650,12 +662,10 @@ struct MenuBarView: View {
                 otherThreadButton(for: mr, status: status, key: key)
             }
 
-            Label(ageString(mr.createdAt), systemImage: "clock")
-                .foregroundStyle(.secondary)
+            SemanticTag(title: ageString(mr.createdAt), systemImage: "clock", tone: .neutral)
                 .help("Date de creation")
         }
         .font(.caption2)
-        .lineLimit(1)
     }
 
     private func reviewAccessibilityLabel(for mr: MRSummary) -> String {
@@ -673,26 +683,22 @@ struct MenuBarView: View {
         for mr: MRSummary,
         status: MRApprovals
     ) -> some View {
-        if status.personalThreadsNeedingRevisit > 0 {
+        if status.personalThreadsNeedingRevisit > 0,
+           let noteId = status.firstPersonalThreadNeedingRevisitNoteId {
             let threadCount = status.personalThreadsNeedingRevisit
             Button {
-                openURL("\(mr.webUrl)/changes")
+                openURL("\(mr.webUrl)#note_\(noteId)")
             } label: {
-                Label(
-                    "À revalider · \(threadCount)",
-                    systemImage: "arrow.triangle.2.circlepath"
+                SemanticTag(
+                    title: "À revalider · \(threadCount)",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    tone: .attention
                 )
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Color.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.orange)
-            .help("Un commit est plus récent que votre dernier commentaire : ouvrir les changements")
-            .immediateTooltip("Un commit est plus récent que votre dernier commentaire : ouvrir les changements")
-            .accessibilityLabel(
-                "\(threadCount) fil\(threadCount == 1 ? "" : "s") à revalider : ouvrir les changements de !\(mr.iid) dans GitLab"
-            )
+            .help("Ouvrir le premier fil personnel à revalider")
+            .immediateTooltip("Ouvrir le premier fil personnel à revalider")
+            .accessibilityLabel("Ouvrir le premier fil personnel à revalider dans GitLab")
         }
     }
 
@@ -707,16 +713,17 @@ struct MenuBarView: View {
             Button {
                 openURL("\(mr.webUrl)#note_\(noteId)")
             } label: {
-                Label("\(status.myUnresolvedThreads)", systemImage: "bubble.left.fill")
-                    .frame(width: 18, height: 18)
-                    .padding(3)
+                SemanticTag(
+                    title: "\(status.myUnresolvedThreads) mes fils",
+                    systemImage: "bubble.left.fill",
+                    tone: .accent
+                )
                     .background(
                         hoveredPersonalThread == key ? Color.secondary.opacity(0.24) : .clear,
                         in: RoundedRectangle(cornerRadius: 4)
                     )
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.orange)
             .help("Ouvrir votre premier fil non resolu dans GitLab")
             .immediateTooltip("Ouvrir votre premier fil non resolu dans GitLab")
             .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non resolus dans GitLab")
@@ -724,8 +731,11 @@ struct MenuBarView: View {
                 hoveredPersonalThread = isHovering ? key : nil
             }
         } else {
-            Label("\(status.myUnresolvedThreads)", systemImage: "bubble.left.fill")
-                .foregroundStyle(status.myUnresolvedThreads > 0 ? .orange : .secondary)
+            SemanticTag(
+                title: "\(status.myUnresolvedThreads) mes fils",
+                systemImage: "bubble.left.fill",
+                tone: status.myUnresolvedThreads > 0 ? .accent : .neutral
+            )
                 .help("\(status.myUnresolvedThreads) fil\(status.myUnresolvedThreads == 1 ? "" : "s") vous concernant non resolu\(status.myUnresolvedThreads == 1 ? "" : "s")")
         }
     }
@@ -741,16 +751,17 @@ struct MenuBarView: View {
             Button {
                 openURL("\(mr.webUrl)#note_\(noteId)")
             } label: {
-                Label("\(status.otherUnresolvedThreads)", systemImage: "bubble.left.and.bubble.right.fill")
-                    .frame(width: 18, height: 18)
-                    .padding(3)
+                SemanticTag(
+                    title: "\(status.otherUnresolvedThreads) autres",
+                    systemImage: "bubble.left.and.bubble.right.fill",
+                    tone: .attention
+                )
                     .background(
                         hoveredOtherThread == key ? Color.secondary.opacity(0.24) : .clear,
                         in: RoundedRectangle(cornerRadius: 4)
                     )
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.orange)
             .help("Ouvrir le premier fil non resolu des autres dans GitLab")
             .immediateTooltip("Ouvrir le premier fil non resolu des autres dans GitLab")
             .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non resolus des autres dans GitLab")
@@ -758,8 +769,11 @@ struct MenuBarView: View {
                 hoveredOtherThread = isHovering ? key : nil
             }
         } else {
-            Label("\(status.otherUnresolvedThreads)", systemImage: "bubble.left.and.bubble.right.fill")
-                .foregroundStyle(status.otherUnresolvedThreads > 0 ? .orange : .secondary)
+            SemanticTag(
+                title: "\(status.otherUnresolvedThreads) autres",
+                systemImage: "bubble.left.and.bubble.right.fill",
+                tone: status.otherUnresolvedThreads > 0 ? .attention : .neutral
+            )
                 .help("\(status.otherUnresolvedThreads) autre\(status.otherUnresolvedThreads == 1 ? "" : "s") fil\(status.otherUnresolvedThreads == 1 ? "" : "s") non resolu\(status.otherUnresolvedThreads == 1 ? "" : "s")")
         }
     }
@@ -768,31 +782,25 @@ struct MenuBarView: View {
     private func pipelineMetadata(for mr: MRSummary) -> some View {
         switch mr.headPipeline?.status {
         case "success":
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            SemanticTag(title: "CI OK", systemImage: "checkmark.circle.fill", tone: .positive)
                 .help("CI réussie")
         case "failed":
-            Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.red)
+            SemanticTag(title: "CI KO", systemImage: "xmark.circle.fill", tone: .critical)
                 .help("CI échouée")
         case "running":
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .foregroundStyle(.orange)
+            SemanticTag(title: "CI en cours", systemImage: "arrow.triangle.2.circlepath", tone: .attention)
                 .help("CI en cours")
         case "pending":
-            Image(systemName: "clock.fill")
-                .foregroundStyle(.orange)
+            SemanticTag(title: "CI attente", systemImage: "clock.fill", tone: .attention)
                 .help("CI en attente")
         case "canceled":
-            Image(systemName: "minus.circle.fill")
-                .foregroundStyle(.secondary)
+            SemanticTag(title: "CI annulée", systemImage: "minus.circle.fill", tone: .neutral)
                 .help("CI annulée")
         case .some:
-            Image(systemName: "questionmark.circle")
-                .foregroundStyle(.secondary)
+            SemanticTag(title: "CI ?", systemImage: "questionmark.circle", tone: .neutral)
                 .help("État CI inconnu")
         case .none:
-            EmptyView()
+            SemanticTag(title: "CI n/a", systemImage: "minus", tone: .neutral)
         }
     }
 
@@ -800,16 +808,19 @@ struct MenuBarView: View {
     private func approvalMetadata(for mr: MRSummary) -> some View {
         let key = MRKey(projectId: mr.projectId, iid: mr.iid)
         if let approval = store.approvals[key] {
-            Label(
-                "\(approval.given)/\(approval.required)",
-                systemImage: approval.given >= approval.required ? "checkmark.circle.fill" : "hand.thumbsup"
+            SemanticTag(
+                title: "\(approval.given)/\(approval.required) appro.",
+                systemImage: approval.given >= approval.required ? "checkmark.circle.fill" : "hand.thumbsup",
+                tone: approval.given >= approval.required ? .positive : .neutral
             )
-            .foregroundStyle(approval.given >= approval.required ? .green : .secondary)
             .help("\(approval.given) approbation\(approval.given == 1 ? "" : "s") sur \(approval.required)")
 
             if approval.unresolvedThreads > 0 {
-                Label("\(approval.unresolvedThreads)", systemImage: "bubble.left.fill")
-                    .foregroundStyle(.orange)
+                SemanticTag(
+                    title: "\(approval.unresolvedThreads) fil\(approval.unresolvedThreads == 1 ? "" : "s")",
+                    systemImage: "bubble.left.fill",
+                    tone: .attention
+                )
                     .help("\(approval.unresolvedThreads) discussion\(approval.unresolvedThreads == 1 ? "" : "s") non résolue\(approval.unresolvedThreads == 1 ? "" : "s")")
             }
         }
@@ -1182,17 +1193,15 @@ struct MenuBarView: View {
         return String(value[range])
     }
 
-    private func jiraColor(for mr: MRSummary) -> Color {
+    private func jiraTone(for mr: MRSummary) -> SemanticTagTone {
         let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        guard let jira = store.jiraStatuses[key] else { return .secondary }
-        if mr.state == "opened" && jira.isStale {
-            return .orange
-        }
-        switch jira.categoryKey {
-        case "done": return .green
-        case "new": return .blue
-        default: return .orange
-        }
+        guard let jira = store.jiraStatuses[key] else { return .neutral }
+        return jiraTagTone(
+            name: jira.name,
+            categoryKey: jira.categoryKey,
+            isOpen: mr.state == "opened",
+            isStale: jira.isStale
+        )
     }
 
     private func ageString(_ date: Date) -> String {

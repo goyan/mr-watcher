@@ -38,6 +38,8 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F25 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
 | F26 | Approbation bloquée jusqu'aux tests `build affected` verts ; auto review masquée après approbation de Claude | ✅ done |
 | F27 | Signal orange actionnable « À revalider · N fils » lorsqu'un commit de tête est postérieur au dernier commentaire personnel d'un fil non résolu | ✅ done |
+| F28 | Tags sémantiques compacts et colorés pour Jira, CI, conflits, retards, approbations et fils dans les deux vues de monitoring | ✅ done |
+| F29 | Signal « À revalider » ouvre directement la première note d’un fil personnel nécessitant une revalidation dans les deux vues | ✅ done |
 
 ### Actions
 
