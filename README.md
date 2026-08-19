@@ -13,20 +13,40 @@ barre de menus :
 - **À revoir** : les MRs ouvertes, non-Draft, d'autres auteurs, correspondant aux
   labels GitLab configurés, hors tickets Jira abandonnés et hors **Mes revues**.
 
-Dans **Mes revues**, les MRs déjà approuvées sont déplacées dans **Approved**,
-après **To Review** (inclut `Code review`) et **Les autres**, sauf si l'un de
-vos fils reste non résolu : elles demeurent alors dans la file d'action. La
-vue **À revoir** conserve les groupes **To Review** et **Les autres**. Jira
-enrichit les données après le premier affichage GitLab afin de ne pas bloquer
-l'interface. La MR interrogée affiche **Chargement Jira** jusqu'à la
+### Fenêtre principale — une table à colonnes
+
+Chaque merge request occupe **une ligne**, et chaque information une **colonne
+alignée d'une ligne à l'autre** : le regard descend une colonne pour comparer,
+au lieu de lire chaque ligne. Un **rail de gravité** coloré borde la ligne à
+gauche, doublé d'une **pastille d'état** qui nomme la prochaine action —
+`Conflit`, `CI KO`, `Rebase requis`, `CI en cours`, `En attente de revue`,
+`Prête à merger`. La couleur n'est jamais le seul porteur de sens.
+
+L'ordre est **figé par urgence**, pas par date :
+
+- **Mes MRs** : bloquée → en retard → fils ouverts → en attente d'approbation → prête.
+- **Revues** : à revalider → à reviewer → j'attends l'auteur → approuvée, la plus
+  vieille dette de review d'abord.
+
+Les deux onglets de revue offrent des **chips de filtre à compteurs** (`Tout`,
+`À revalider`, `Mes fils`, `Sans revue`, `To Review`, `Approuvées`) sur une liste
+plate. Une chip à zéro reste affichée, grisée : les positions ne bougent jamais.
+En revue, la colonne **Votre implication** répond à la seule question qui compte —
+ce que *vous* avez à faire sur cette MR — et ses libellés ouvrent directement le
+fil concerné dans GitLab.
+
+Le **panneau de barre de menus** conserve son affichage compact en cartes, avec
+le regroupement par statut Jira (**To Review** / **Les autres** / **Approved**).
+
+Jira enrichit les données après le premier affichage GitLab afin de ne pas
+bloquer l'interface. La MR interrogée affiche **Chargement Jira** jusqu'à la
 publication immédiate de son statut, sans état vide intermédiaire.
 
-Chaque ligne affiche des tags sémantiques compacts, identiques dans la fenêtre
-principale et le panneau de barre de menus : vert pour les états positifs,
-orange pour l'attention, rouge pour les blocages et gris pour les états
-neutres. Chaque tag conserve son icône et son libellé court.
+Les tags sémantiques suivent la même palette partout : vert pour les états
+positifs, orange pour l'attention, rouge pour les blocages, gris pour les états
+neutres. Une donnée absente ne laisse **aucun** marqueur — la cellule reste vide.
 
-Chaque ligne affiche :
+Informations disponibles sur une ligne :
 
 | Indicateur | Signification |
 |------------|---------------|

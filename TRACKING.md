@@ -178,3 +178,63 @@
 | Fils à revalider | ✅ badge orange actionnable « À revalider · N fils » si le commit de tête est postérieur au dernier commentaire de l'utilisateur dans un fil personnel non résolu ; ouvre le premier fil personnel à revalider dans GitLab |
 | Tags de statut | ✅ tags sémantiques communs pour Jira, CI, conflits, retards, approbations et fils, avec palette vert/orange/rouge/gris cohérente dans la fenêtre et le panneau de barre de menus |
 | Lien « À revalider » | ✅ ouvre directement la première note d’un fil personnel nécessitant une revalidation (`#note_<id>`), seulement lorsqu'elle est disponible |
+
+---
+
+## Session 2026-08-19 (suite — refonte fenêtre principale en tableau à colonnes)
+
+Fenêtre principale (`StatusView.swift`) refaite en table à colonnes fixes, en 4 étapes livrées
+successivement, plus deux passes de correctifs constatés à l'écran (pas déduits du code).
+Contrat GitLab/Jira, polling, notifications, Sparkle, popover (`MenuBarView.swift`) : intacts,
+zéro diff sur tout le fil.
+
+### Étape 1 — modèle de présentation pur
+
+| Quoi | Résultat |
+|------|----------|
+| `StatusPresentation.swift` (Foundation seul, zéro SwiftUI) | ✅ `MRRowModel`/`MergedRowModel`, machine d'états à deux contextes (auteur/reviewer), gate `canApprove` porté à l'identique, gravité + tri, prédicats de chips, dérivés (ticket, titre dédupliqué, âge, retard borné) |
+| `StatusPresentationTests.swift` | ✅ 48 tests, dont le gate Approuver exhaustif |
+
+### Étape 2 — tokens + table « Mes MRs »
+
+| Quoi | Résultat |
+|------|----------|
+| `DesignTokens.swift` | ✅ tokens de couleur/espacement/hauteur, largeurs de colonnes partagées en-tête/lignes |
+| `StatusTableView.swift` (config `.author`) | ✅ rail de gravité, sections Ouvertes/Récemment mergées, actions en icônes à slots fixes |
+| Bug corrigé au passage | ✅ `!IID` affichait un séparateur de milliers (`LocalizedStringKey`) — `Text(verbatim:)` |
+
+### Étape 3 — onglets revue
+
+| Quoi | Résultat |
+|------|----------|
+| `FilterChipsView.swift` | ✅ chips à compteurs, zéro réécriture de prédicat (réutilise `StatusPresentation.swift`) |
+| `ReviewSectionGroups.swift` | ✅ déplacé depuis `StatusView.swift` tel quel — consommé par le popover, zéro diff `MenuBarView.swift` |
+| `StatusTableView.swift` (config `.reviewer`) | ✅ colonne Votre implication, `Approuver` toujours visible/désactivé (plus retiré) |
+| Défaut trouvé en vérifiant à l'écran | ✅ colonne Actions à 5 slots (↻▶✦Approuver✕) tronquait le bouton à libellé — largeurs réajustées à partir de mesures réelles (Accessibility API), pas à l'aveugle |
+
+### Correctif — masquage `/rebase` couplé à un libellé d'affichage
+
+| Quoi | Résultat |
+|------|----------|
+| `MRRowModel.hasConflicts` / `.pipelineWebUrl` | ✅ exposés depuis `MRSummary`, plus de test sur `state.label == "Conflit"` pour une règle métier |
+| `DerivedState.isPipelineState` | ✅ posé au point de décision de la machine d'états ; pastille État cliquable vers le pipeline quand vrai |
+
+### Étape 4 — 3 bugs constatés à l'écran + nettoyage + accessibilité + docs
+
+| Bug | Correctif |
+|-----|-----------|
+| Table débordait à 1000 pt (`minWidth` codé en dur, budget colonnes non vérifié) | `StatusColumn.minimumTableWidth` / `ReviewColumn.minimumTableWidth` calculées, `DesignTokens.tableMinWidth` = leur maximum, alimente `.frame(minWidth:)` — ne peut plus se désynchroniser |
+| En-tête de colonnes au-dessus du titre de section (annonçait les colonnes d'une section pas encore nommée) | Chaque section « Ouvertes »/« Récemment mergées » porte son propre `header` épinglé |
+| Titre orphelin en fenêtre large (excédent absorbé par la cellule) | `titleMaxWidth` plafonné + `Spacer()` après la cellule Titre : l'excédent va dans la gouttière |
+
+| Nettoyage | Résultat |
+|-----------|----------|
+| Code mort étape 4 (`trailingActions`, `metadata(for:)`, `jiraColor`, et toute leur chaîne d'appel orpheline) | ✅ supprimé, preuve au grep par symbole (méthode `stateMetadata` de l'étape 2, reconduite) — `StatusView.swift` : 1455 → ~640 lignes |
+| `TagFlowLayout`/`ReviewSectionGroups` | ✅ conservés — consommés par le popover |
+| Accessibilité | ✅ résumé VoiceOver par ligne (`accessibilityElement(children: .contain)` + libellé complet identifiant/titre/état/implication), cellules chiffrées étiquetées, chips avec compteur et état sélectionné ; fonts sémantiques + `minHeight` partout (aucune taille fixe) |
+
+### Validation finale
+
+`swift build -c release` + `swift test` (60 tests) + `install.sh`, 3 onglets vérifiés en sombre et
+clair à 1000/1140/1600 pt dans l'app installée, dont un clic réel sur un lien de fil (ouverture de
+la bonne ancre `#note_` sur une vraie MR) et un filtre par chip.

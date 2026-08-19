@@ -27,9 +27,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F14 | Découverte des revues depuis les événements GitLab, conservation locale des MRs encore ouvertes et rafraîchissement borné par rotation | ✅ done |
 | F15 | Compteurs de threads personnels (créés ou auxquels l'utilisateur a participé) et externes actionnables : ouvrent directement le premier fil non résolu correspondant dans GitLab | ✅ done |
 | F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant un label GitLab configuré (repli `Indigo, indigo`), hors tickets Jira abandonnés | ✅ done |
-| F17 | Priorisation des revues par statut Jira : sections `To Review` (`Code review` inclus) et `Les autres`; dans « Mes revues », `Approved` clôt la file sauf fil personnel ouvert | ✅ done |
+| F17 | Priorisation des revues par gravité (à revalider > à reviewer > j'attends l'auteur > approuvée), pas par statut Jira : le groupement en sections `To Review`/`Les autres`/`Approved` est remplacé par des chips de filtre à compteurs (`Tout`, `À revalider`, `Mes fils`, `Sans revue`/`To Review` dans « À revoir », `Approuvées` dans « Mes revues ») sur une liste plate triée | ✅ done |
 | F18 | Affichage GitLab immédiat des revues, avec `Chargement Jira` par MR pendant l'enrichissement, publication incrémentale sans état vide puis regroupement Jira asynchrone | ✅ done |
-| F19 | Vue « Mes MRs » homogénéisée avec les cartes de revue, et total de labels surveillés détaillé par statut Jira | ✅ done |
+| F19 | Vue « Mes MRs » homogène avec les vues de revue (même table à colonnes, même langage de tags), et total de labels surveillés détaillé par statut Jira en pied de page | ✅ done |
 | F20 | Chargement initial explicite, ticket Jira intégré aux métadonnées et auteur affiché en `Prénom N.`, y compris avec un pseudo GitLab technique | ✅ done |
 | F21 | Rafraîchissement individuel d'une MR, avec mise à jour GitLab puis Jira sans poll global | ✅ done |
 | F22 | Avertissement non bloquant Jira/acli avec détail assaini au survol, et tooltips instantanés pour les actions et les notes de version | ✅ done |
@@ -40,6 +40,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F27 | Signal orange actionnable « À revalider · N fils » lorsqu'un commit de tête est postérieur au dernier commentaire personnel d'un fil non résolu | ✅ done |
 | F28 | Tags sémantiques compacts et colorés pour Jira, CI, conflits, retards, approbations et fils dans les deux vues de monitoring | ✅ done |
 | F29 | Signal « À revalider » ouvre directement la première note d’un fil personnel nécessitant une revalidation dans les deux vues | ✅ done |
+| F30 | Vue tableau à colonnes pour les 3 onglets (largeurs alignées en-tête/lignes, rail de gravité, pastille État unique cliquable vers le pipeline CI quand l'état est piloté par la CI, colonne Votre implication en revue, tri par gravité figé, chips de filtre à compteurs) | ✅ done |
 
 ### Actions
 
@@ -92,7 +93,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | J1 | Statut Jira par MR via `acli` shell-out | ✅ done |
 | J2 | Statut Jira conservé et rafraîchi pour les MRs mergées | ✅ done |
 | B2 | Ping Slack depuis le menu (COPRO → #copro-daily-run, TRANSACTION → #transac-daily-run) | haute — en attente token Slack |
-| B3 | Filtrer/trier les MRs (par urgence : CI❌ > ⬇N > sans review) | moyenne |
+| B3 | ~~Filtrer/trier les MRs (par urgence : CI❌ > ⬇N > sans review)~~ | ✅ done — F30 |
 | B4 | Support multi-auteurs (reviewer assigné à moi) | basse |
 | B5 | ~~Intervalle de poll configurable via UI~~ | ✅ done — A4 |
 | B6 | Login Items automatique à l'installation | basse |

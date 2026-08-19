@@ -47,14 +47,29 @@ Sources/MRWatcher/
 ├── PollingScheduler.swift     — poll toutes les N secondes (UserDefaults pollIntervalSeconds, plancher 15 s, défaut 60 s)
 ├── StateStore.swift           — @Observable @MainActor, diff CI/commentaires/approbations → events
 ├── NotificationService.swift  — UserNotifications macOS
-├── MenuBarView.swift          — SwiftUI, menu de la barre de menus, liste MRs enrichies
-├── StatusView.swift           — fenêtre principale (Dock) : tableau MRs, menu ⚙️, intervalle, version installée
+├── StatusPresentation.swift   — modèle de présentation PUR (Foundation seul, zéro SwiftUI) : machine d'états
+│                                à deux contextes (auteur/reviewer), gravité et tri, gate `canApprove`,
+│                                prédicats de chips, dérivés (ticket, titre, âge, retard borné). Testé.
+├── DesignTokens.swift         — couleurs, espacements, hauteurs, largeurs de colonnes partagées en-tête/lignes,
+│                                `tableMinWidth` CALCULÉE (jamais un nombre magique) → `.frame(minWidth:)`
+├── StatusTableView.swift      — table à colonnes de la fenêtre : en-tête épinglé, rail de gravité, cellules,
+│                                colonne Actions à slots fixes. Composant bête piloté par `StatusTableCallbacks`
+├── FilterChipsView.swift      — chips de filtre à compteurs (chip à zéro : grisée, désactivée, position stable)
+├── ReviewSectionGroups.swift  — groupement To Review / Les autres / Approved — consommé par le POPOVER seul
+├── SemanticTag.swift          — `SemanticTagTone`, `SemanticTag`, `TagFlowLayout` (popover), `jiraTagTone`
+├── ImmediateTooltip.swift     — tooltips AppKit instantanés (`.immediateTooltip`), doublés de `.help`
+├── ReleaseNotes.swift         — notes de version embarquées, affichées au survol de la version
+├── MenuBarView.swift          — panneau de barre de menus : cartes compactes, 4 vues, sections Jira
+├── StatusView.swift           — fenêtre principale (Dock) : onglets, header, footer, réglages, orchestration
+│                                (Task/NSAlert) — le rendu des lignes vit dans StatusTableView
 ├── SetupView.swift            — formulaire de configuration (PAT masqué)
 ├── SetupWindowController.swift — NSPanel hébergeant SetupView
 └── UpdaterController.swift    — Sparkle `SPUStandardUpdaterController`, « Rechercher les mises à jour... »
 
 Tests/MRWatcherTests/
-└── RuntimeSecurityTests.swift — garde-fous sécurité runtime (redirection PAT, permissions .env)
+├── RuntimeSecurityTests.swift      — garde-fous sécurité runtime (redirection PAT, permissions .env)
+└── StatusPresentationTests.swift   — modèle de présentation : gate Approuver exhaustif, machines d'états,
+                                      gravité et tri, prédicats de chips, dérivés
 
 scripts/
 ├── release.sh             — build SwiftPM propre, ZIP + DMG, signature et vérification de l'appcast
