@@ -5,6 +5,8 @@ struct MenuBarView: View {
     private enum DisplayScope: String, CaseIterable, Identifiable {
         case needsAttention = "À traiter"
         case all = "Toutes"
+        case reviews = "Mes revues"
+        case reviewable = "À revoir"
 
         var id: Self { self }
     }
@@ -46,6 +48,9 @@ struct MenuBarView: View {
     @State private var mergedExpanded = false
     @State private var hoveredMR: MRKey?
     @State private var hoveredAction: MRKey?
+    @State private var hoveredPersonalThread: MRKey?
+    @State private var hoveredOtherThread: MRKey?
+    @State private var hoveredReviewDismissal: MRKey?
 
     private var openedMRs: [MRSummary] {
         store.mrs
@@ -166,8 +171,14 @@ struct MenuBarView: View {
                         errorNotice(error)
                     }
 
-                    mrContent
-                    eventsSection
+                    if displayScope == .reviews {
+                        reviewContent
+                    } else if displayScope == .reviewable {
+                        reviewableContent
+                    } else {
+                        mrContent
+                        eventsSection
+                    }
                 }
                 .padding(12)
             }
@@ -257,6 +268,85 @@ struct MenuBarView: View {
                     .background(Color(nsColor: .quaternaryLabelColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
+        case .reviews:
+            EmptyView()
+        case .reviewable:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var reviewContent: some View {
+        if store.reviewedMRs.isEmpty {
+            emptyState(title: "Aucune revue en cours", symbol: "bubble.left.and.bubble.right")
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                reviewSections(
+                    for: store.reviewedMRs,
+                    statuses: store.reviewStatuses,
+                    showsActions: true
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var reviewableContent: some View {
+        if store.reviewableMRs.isEmpty {
+            emptyState(title: "Aucune MR Indigo à revoir", symbol: "eye")
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                reviewSections(
+                    for: store.reviewableMRs,
+                    statuses: store.reviewableStatuses,
+                    showsActions: true
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func reviewSections(
+        for mrs: [MRSummary],
+        statuses: [MRKey: MRApprovals],
+        showsActions: Bool
+    ) -> some View {
+        let toReview = mrs.filter(isToReview)
+        let others = mrs.filter { !isToReview($0) }
+
+        reviewSection(
+            title: "To Review",
+            mrs: toReview,
+            statuses: statuses,
+            showsActions: showsActions
+        )
+        reviewSection(
+            title: "Les autres",
+            mrs: others,
+            statuses: statuses,
+            showsActions: showsActions
+        )
+    }
+
+    private func reviewSection(
+        title: String,
+        mrs: [MRSummary],
+        statuses: [MRKey: MRApprovals],
+        showsActions: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionLabel(
+                title: title,
+                subtitle: "\(mrs.count) merge request\(mrs.count == 1 ? "" : "s")"
+            )
+
+            if !mrs.isEmpty {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(mrs) { mr in
+                        reviewRow(mr, statuses: statuses, showsActions: showsActions)
+                    }
+                }
+            }
         }
     }
 
@@ -320,9 +410,81 @@ struct MenuBarView: View {
                 Button {
                     openURL(mr.webUrl)
                 } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 5) {
+                            Text("!\(mr.iid)")
+                                .font(.callout.weight(.semibold))
+                            if let author = mr.author {
+                                Text(author.shortDisplayName)
+                                    .font(.caption.weight(.semibold))
+                                    .help("Auteur : \(author.fullDescription)")
+                            }
+                            Text(projectName(for: mr))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .lineLimit(1)
+
+                        Text(mr.title)
+                            .font(.callout)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(mrAccessibilityLabel(for: mr))
+                .help("Ouvrir !\(mr.iid) dans GitLab")
+
+                metadataRow(for: mr)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 4) {
+                refreshButton(for: mr, key: key)
+                manualPipelineActions(for: mr, key: key)
+                rowAction(for: mr, key: key)
+            }
+        }
+        .padding(8)
+        .frame(minHeight: 72, alignment: .top)
+        .background(
+            hoveredMR == key ? Color.secondary.opacity(0.16) : Color(nsColor: .quaternaryLabelColor).opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .accessibilityElement(children: .contain)
+        .onHover { isHovering in
+            hoveredMR = isHovering ? key : nil
+        }
+    }
+
+    private func reviewRow(
+        _ mr: MRSummary,
+        statuses: [MRKey: MRApprovals],
+        showsActions: Bool
+    ) -> some View {
+        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 12, height: 16)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Button {
+                    openURL(mr.webUrl)
+                } label: {
                     HStack(spacing: 5) {
                         Text("!\(mr.iid)")
                             .font(.callout.weight(.semibold))
+                        if let author = mr.author {
+                            Text(author.shortDisplayName)
+                                .font(.caption.weight(.semibold))
+                                .help("Auteur : \(author.fullDescription)")
+                        }
                         Text(projectName(for: mr))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -336,14 +498,20 @@ struct MenuBarView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Ouvrir la merge request !\(mr.iid), \(mr.title), dans GitLab")
+                .accessibilityLabel(reviewAccessibilityLabel(for: mr))
                 .help("Ouvrir !\(mr.iid) dans GitLab")
 
-                metadataRow(for: mr)
+                reviewMetadataRow(for: mr, key: key, statuses: statuses)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            rowAction(for: mr, key: key)
+            HStack(spacing: 4) {
+                refreshButton(for: mr, key: key)
+                manualPipelineActions(for: mr, key: key)
+                if showsActions {
+                    reviewActions(for: mr, key: key, statuses: statuses)
+                }
+            }
         }
         .padding(8)
         .frame(minHeight: 72, alignment: .top)
@@ -360,10 +528,14 @@ struct MenuBarView: View {
     @ViewBuilder
     private func jiraButton(for mr: MRSummary) -> some View {
         if let ticket = ticket(for: mr) {
+            let key = MRKey(projectId: mr.projectId, iid: mr.iid)
             Button {
                 openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
             } label: {
-                Label(ticket, systemImage: "ticket")
+                Label(
+                    store.jiraStatuses[key].map { "\(ticket) · \($0.name)" } ?? ticket,
+                    systemImage: "ticket"
+                )
             }
             .buttonStyle(.plain)
             .foregroundStyle(jiraColor(for: mr))
@@ -390,6 +562,133 @@ struct MenuBarView: View {
         }
         .font(.caption2)
         .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private func reviewMetadataRow(
+        for mr: MRSummary,
+        key: MRKey,
+        statuses: [MRKey: MRApprovals]
+    ) -> some View {
+        HStack(spacing: 7) {
+            jiraButton(for: mr)
+            pipelineMetadata(for: mr)
+
+            if mr.hasConflicts {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .help("Conflit de merge")
+                    .accessibilityLabel("Conflit de merge")
+            }
+
+            if let behind = mr.divergedCommitsCount, behind > 0 {
+                Label("\(behind)", systemImage: "arrow.down")
+                    .foregroundStyle(.orange)
+                    .help("\(behind) commit\(behind == 1 ? "" : "s") de retard")
+            }
+
+            if let status = statuses[key] {
+                Label(
+                    "\(status.given)/\(status.required)",
+                    systemImage: status.given >= status.required ? "checkmark.circle.fill" : "hand.thumbsup"
+                )
+                .foregroundStyle(status.given >= status.required ? .green : .secondary)
+                .help("\(status.given) approbation\(status.given == 1 ? "" : "s") sur \(status.required)")
+
+                if status.isApprovedByMe {
+                    Label("Approved", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .help("Vous avez approuvé cette merge request")
+                        .accessibilityLabel("Merge request approuvée")
+                }
+
+                personalThreadButton(for: mr, status: status, key: key)
+
+                otherThreadButton(for: mr, status: status, key: key)
+            }
+
+            Label(ageString(mr.createdAt), systemImage: "clock")
+                .foregroundStyle(.secondary)
+                .help("Date de creation")
+        }
+        .font(.caption2)
+        .lineLimit(1)
+    }
+
+    private func reviewAccessibilityLabel(for mr: MRSummary) -> String {
+        let author = mr.author.map { ", auteur \($0.fullDescription)" } ?? ""
+        return "Ouvrir la merge request !\(mr.iid), \(mr.title)\(author), dans GitLab"
+    }
+
+    private func mrAccessibilityLabel(for mr: MRSummary) -> String {
+        let author = mr.author.map { ", auteur \($0.fullDescription)" } ?? ""
+        return "Ouvrir la merge request !\(mr.iid), \(mr.title)\(author), dans GitLab"
+    }
+
+    @ViewBuilder
+    private func personalThreadButton(
+        for mr: MRSummary,
+        status: MRApprovals,
+        key: MRKey
+    ) -> some View {
+        if status.myUnresolvedThreads > 0,
+           let noteId = status.firstMyUnresolvedThreadNoteId {
+            Button {
+                openURL("\(mr.webUrl)#note_\(noteId)")
+            } label: {
+                Label("\(status.myUnresolvedThreads)", systemImage: "bubble.left.fill")
+                    .frame(width: 18, height: 18)
+                    .padding(3)
+                    .background(
+                        hoveredPersonalThread == key ? Color.secondary.opacity(0.24) : .clear,
+                        in: RoundedRectangle(cornerRadius: 4)
+                    )
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.orange)
+            .help("Ouvrir votre premier fil non resolu dans GitLab")
+            .accessibilityLabel("Ouvrir le premier de vos \(status.myUnresolvedThreads) fils non resolus dans GitLab")
+            .onHover { isHovering in
+                hoveredPersonalThread = isHovering ? key : nil
+            }
+        } else {
+            Label("\(status.myUnresolvedThreads)", systemImage: "bubble.left.fill")
+                .foregroundStyle(status.myUnresolvedThreads > 0 ? .orange : .secondary)
+                .help("\(status.myUnresolvedThreads) fil\(status.myUnresolvedThreads == 1 ? "" : "s") vous concernant non resolu\(status.myUnresolvedThreads == 1 ? "" : "s")")
+        }
+    }
+
+    @ViewBuilder
+    private func otherThreadButton(
+        for mr: MRSummary,
+        status: MRApprovals,
+        key: MRKey
+    ) -> some View {
+        if status.otherUnresolvedThreads > 0,
+           let noteId = status.firstOtherUnresolvedThreadNoteId {
+            Button {
+                openURL("\(mr.webUrl)#note_\(noteId)")
+            } label: {
+                Label("\(status.otherUnresolvedThreads)", systemImage: "bubble.left.and.bubble.right.fill")
+                    .frame(width: 18, height: 18)
+                    .padding(3)
+                    .background(
+                        hoveredOtherThread == key ? Color.secondary.opacity(0.24) : .clear,
+                        in: RoundedRectangle(cornerRadius: 4)
+                    )
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.orange)
+            .help("Ouvrir le premier fil non resolu des autres dans GitLab")
+            .accessibilityLabel("Ouvrir le premier des \(status.otherUnresolvedThreads) fils non resolus des autres dans GitLab")
+            .onHover { isHovering in
+                hoveredOtherThread = isHovering ? key : nil
+            }
+        } else {
+            Label("\(status.otherUnresolvedThreads)", systemImage: "bubble.left.and.bubble.right.fill")
+                .foregroundStyle(status.otherUnresolvedThreads > 0 ? .orange : .secondary)
+                .help("\(status.otherUnresolvedThreads) autre\(status.otherUnresolvedThreads == 1 ? "" : "s") fil\(status.otherUnresolvedThreads == 1 ? "" : "s") non resolu\(status.otherUnresolvedThreads == 1 ? "" : "s")")
+        }
     }
 
     @ViewBuilder
@@ -482,6 +781,138 @@ struct MenuBarView: View {
             .accessibilityLabel("Lancer le rebase de la merge request !\(mr.iid)")
             .onHover { isHovering in
                 hoveredAction = isHovering ? key : nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func reviewApprovalButton(
+        for mr: MRSummary,
+        key: MRKey,
+        statuses: [MRKey: MRApprovals]
+    ) -> some View {
+        if canApproveReview(mr, key: key, statuses: statuses) {
+            Button {
+                confirmApproval(for: mr)
+            } label: {
+                Image(systemName: "hand.thumbsup")
+                    .frame(width: 18, height: 18)
+                    .padding(3)
+                    .background(
+                        hoveredAction == key ? Color.secondary.opacity(0.24) : .clear,
+                        in: RoundedRectangle(cornerRadius: 4)
+                    )
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.green)
+            .disabled(store.isLoading)
+            .help("Approuver !\(mr.iid) dans GitLab")
+            .accessibilityLabel("Approuver la merge request !\(mr.iid) dans GitLab")
+            .onHover { isHovering in
+                hoveredAction = isHovering ? key : nil
+            }
+        }
+    }
+
+    private func reviewActions(
+        for mr: MRSummary,
+        key: MRKey,
+        statuses: [MRKey: MRApprovals]
+    ) -> some View {
+        HStack(spacing: 4) {
+            reviewApprovalButton(for: mr, key: key, statuses: statuses)
+            if store.reviewedMRs.contains(where: {
+                MRKey(projectId: $0.projectId, iid: $0.iid) == key
+            }) {
+                Button {
+                    store.hideReviewedMR(key: key)
+                } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 18, height: 18)
+                        .padding(3)
+                        .background(
+                            hoveredReviewDismissal == key
+                                ? Color.secondary.opacity(0.24)
+                                : .clear,
+                            in: RoundedRectangle(cornerRadius: 4)
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Masquer !\(mr.iid) de mes revues")
+                .accessibilityLabel("Masquer la merge request !\(mr.iid) de mes revues")
+                .onHover { isHovering in
+                    hoveredReviewDismissal = isHovering ? key : nil
+                }
+            }
+        }
+    }
+
+    private func refreshButton(for mr: MRSummary, key: MRKey) -> some View {
+        Button {
+            Task {
+                await scheduler.refresh(projectId: mr.projectId, mrIid: mr.iid)
+            }
+        } label: {
+            Group {
+                if store.refreshingMRKeys.contains(key) {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .frame(width: 18, height: 18)
+            .padding(3)
+        }
+        .buttonStyle(.plain)
+        .help("Actualiser !\(mr.iid)")
+        .accessibilityLabel("Actualiser la merge request !\(mr.iid)")
+        .disabled(store.refreshingMRKeys.contains(key) || !store.isConfigured)
+    }
+
+    private func canApproveReview(
+        _ mr: MRSummary,
+        key: MRKey,
+        statuses: [MRKey: MRApprovals]
+    ) -> Bool {
+        guard mr.state == "opened",
+              !mr.isDraft,
+              store.testsAreGreen(
+                  for: key,
+                  pipelineId: mr.headPipeline?.id,
+                  fallbackPipelineStatus: mr.headPipeline?.status
+              ),
+              let status = statuses[key] else {
+            return false
+        }
+        return status.myUnresolvedThreads == 0 && !status.isApprovedByMe
+    }
+
+    @ViewBuilder
+    private func manualPipelineActions(for mr: MRSummary, key: MRKey) -> some View {
+        ForEach(store.manualPipelineActions[key]?.actions ?? []) { action in
+            if store.launchingManualPipelineJobIds.contains(action.jobId) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 18, height: 18)
+                    .accessibilityLabel("\(action.kind.title) en cours")
+            } else {
+                Button {
+                    Task {
+                        await scheduler.playManualPipelineAction(
+                            action,
+                            projectId: mr.projectId,
+                            mrIid: mr.iid
+                        )
+                    }
+                } label: {
+                    Label(action.kind.title, systemImage: action.kind.systemImage)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("\(action.kind.title) pour !\(mr.iid)")
+                .accessibilityLabel("\(action.kind.title) pour la merge request !\(mr.iid)")
             }
         }
     }
@@ -660,6 +1091,14 @@ struct MenuBarView: View {
         return String(value[range])
     }
 
+    private func isToReview(_ mr: MRSummary) -> Bool {
+        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+        guard let status = store.jiraStatuses[key]?.name else { return false }
+        return ["to review", "code review"].contains(
+            status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        )
+    }
+
     private func jiraColor(for mr: MRSummary) -> Color {
         let key = MRKey(projectId: mr.projectId, iid: mr.iid)
         guard let jira = store.jiraStatuses[key] else { return .secondary }
@@ -736,6 +1175,34 @@ struct MenuBarView: View {
                 NotificationService.shared.notify(
                     identifier: "rebase-\(mr.projectId)-\(mr.iid)",
                     title: "Rebase échoué — !\(mr.iid)",
+                    body: error.localizedDescription,
+                    url: mr.webUrl
+                )
+            }
+        }
+    }
+
+    private func confirmApproval(for mr: MRSummary) {
+        let alert = NSAlert()
+        alert.messageText = "Approuver la merge request ?"
+        alert.informativeText = "Cette action envoie votre approbation pour !\(mr.iid) dans GitLab."
+        alert.addButton(withTitle: "Approuver")
+        alert.addButton(withTitle: "Annuler")
+        alert.alertStyle = .informational
+        alert.buttons.last?.keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        Task {
+            do {
+                try await scheduler.approve(projectId: mr.projectId, mrIid: mr.iid)
+                await scheduler.refresh(projectId: mr.projectId, mrIid: mr.iid)
+            } catch {
+                store.lastError = "Approbation !\(mr.iid) : \(error.localizedDescription)"
+                NotificationService.shared.notify(
+                    identifier: "review-approval-\(mr.projectId)-\(mr.iid)",
+                    title: "Approbation echouee - !\(mr.iid)",
                     body: error.localizedDescription,
                     url: mr.webUrl
                 )

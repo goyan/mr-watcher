@@ -6,6 +6,27 @@ struct MRKey: Hashable, Codable {
     let iid: Int
 }
 
+struct ManualPipelineActions {
+    let pipelineId: Int
+    let actions: [ManualPipelineAction]
+    let buildAffectedStatus: String?
+}
+
+private enum ManualPipelineActionsLoadState {
+    case loading(pipelineId: Int)
+    case failed(pipelineId: Int)
+    case loaded(ManualPipelineActions)
+
+    var pipelineId: Int {
+        switch self {
+        case let .loading(pipelineId), let .failed(pipelineId):
+            pipelineId
+        case let .loaded(actions):
+            actions.pipelineId
+        }
+    }
+}
+
 struct WatchEvent: Identifiable {
     let id: UUID
     let kind: WatchEventKind
@@ -24,6 +45,10 @@ enum WatchEventKind {
 final class StateStore {
     var mrs: [MRSummary] = []
     var approvals: [MRKey: MRApprovals] = [:]
+    var reviewedMRs: [MRSummary] = []
+    var reviewStatuses: [MRKey: MRApprovals] = [:]
+    var reviewableMRs: [MRSummary] = []
+    var reviewableStatuses: [MRKey: MRApprovals] = [:]
     var events: [WatchEvent] = []
     var isLoading: Bool = false
     var lastError: String? = nil
@@ -31,12 +56,21 @@ final class StateStore {
     var lastSuccessfulPollAt: Date? = nil
     var dismissedKeys: Set<MRKey> = []
     var jiraStatuses: [MRKey: JiraIssueStatus] = [:]
+    var refreshingMRKeys: Set<MRKey> = []
+    var manualPipelineActions: [MRKey: ManualPipelineActions] = [:]
+    var launchingManualPipelineJobIds: Set<Int> = []
 
     var isConfigured: Bool = ConfigManager.shared.isConfigured
 
     private let maxEvents = 50
     private var seenEventKeys: Set<String> = []
     private static let persistedMergedStateKey = "persistedMergedMRState"
+    private static let persistedReviewedMRKeysKey = "persistedReviewedMRKeys"
+    private static let dismissedReviewedMRKeysKey = "dismissedReviewedMRKeys"
+    private var persistedReviewedMRKeys: Set<MRKey>
+    private var dismissedReviewedMRKeys: Set<MRKey>
+    private var manualPipelineActionLoads: [MRKey: (pipelineId: Int, token: UUID)] = [:]
+    private var manualPipelineActionLoadStates: [MRKey: ManualPipelineActionsLoadState] = [:]
 
     private struct PersistedMergedState: Codable {
         let mergedMRs: [MRSummary]
@@ -47,6 +81,8 @@ final class StateStore {
         let persistedState = Self.loadPersistedMergedState()
         mrs = persistedState.mergedMRs
         dismissedKeys = Set(persistedState.dismissedKeys)
+        persistedReviewedMRKeys = Self.loadPersistedReviewedMRKeys()
+        dismissedReviewedMRKeys = Self.loadDismissedReviewedMRKeys()
     }
 
     private func eventKey(projectId: Int, iid: Int, kind: WatchEventKind) -> String {
@@ -65,7 +101,159 @@ final class StateStore {
         dismissedKeys.insert(key)
         mrs.removeAll { MRKey(projectId: $0.projectId, iid: $0.iid) == key }
         jiraStatuses[key] = nil
+        discardStaleManualPipelineActions()
         persistMergedState()
+    }
+
+    func currentReviewedMRKeys() -> Set<MRKey> {
+        persistedReviewedMRKeys
+    }
+
+    func currentDismissedReviewedMRKeys() -> Set<MRKey> {
+        dismissedReviewedMRKeys
+    }
+
+    func replaceReviewedMRKeys(_ keys: Set<MRKey>) {
+        persistedReviewedMRKeys = keys.subtracting(dismissedReviewedMRKeys)
+        persistReviewedMRKeys()
+    }
+
+    func updateReviewedMRs(
+        _ mrs: [MRSummary],
+        statuses: [MRKey: MRApprovals]
+    ) {
+        reviewedMRs = mrs.filter {
+            !dismissedReviewedMRKeys.contains(
+                MRKey(projectId: $0.projectId, iid: $0.iid)
+            )
+        }
+        reviewStatuses = statuses.filter { !dismissedReviewedMRKeys.contains($0.key) }
+        discardStaleManualPipelineActions()
+    }
+
+    func updateReviewableMRs(
+        _ mrs: [MRSummary],
+        statuses: [MRKey: MRApprovals]
+    ) {
+        reviewableMRs = mrs
+        let keys = Set(mrs.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
+        reviewableStatuses = statuses.filter { keys.contains($0.key) }
+        discardStaleManualPipelineActions()
+    }
+
+    func hideReviewedMR(key: MRKey) {
+        dismissedReviewedMRKeys.insert(key)
+        persistedReviewedMRKeys.remove(key)
+        reviewedMRs.removeAll { MRKey(projectId: $0.projectId, iid: $0.iid) == key }
+        reviewStatuses[key] = nil
+        jiraStatuses[key] = nil
+        discardStaleManualPipelineActions()
+        persistReviewedMRKeys()
+        persistDismissedReviewedMRKeys()
+    }
+
+    func updateRefreshedMR(_ mr: MRSummary, approvals approval: MRApprovals) {
+        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+
+        mrs = mrs.map {
+            MRKey(projectId: $0.projectId, iid: $0.iid) == key ? mr : $0
+        }
+        reviewedMRs = reviewedMRs.map {
+            MRKey(projectId: $0.projectId, iid: $0.iid) == key ? mr : $0
+        }
+        reviewableMRs = reviewableMRs.map {
+            MRKey(projectId: $0.projectId, iid: $0.iid) == key ? mr : $0
+        }
+
+        if mrs.contains(where: { MRKey(projectId: $0.projectId, iid: $0.iid) == key }) {
+            approvals[key] = approval
+        }
+        if reviewedMRs.contains(where: { MRKey(projectId: $0.projectId, iid: $0.iid) == key }) {
+            reviewStatuses[key] = approval
+        }
+        if reviewableMRs.contains(where: { MRKey(projectId: $0.projectId, iid: $0.iid) == key }) {
+            reviewableStatuses[key] = approval
+        }
+        invalidateManualPipelineActions(for: [key])
+        discardStaleManualPipelineActions()
+        persistMergedState()
+    }
+
+    func beginManualPipelineActionsLoad(
+        for key: MRKey,
+        pipelineId: Int
+    ) -> UUID? {
+        guard currentDisplayedMR(for: key)?.headPipeline?.id == pipelineId else {
+            return nil
+        }
+        let token = UUID()
+        manualPipelineActionLoads[key] = (pipelineId, token)
+        manualPipelineActionLoadStates[key] = .loading(pipelineId: pipelineId)
+        return token
+    }
+
+    func updateManualPipelineActions(
+        _ result: PipelineJobActions,
+        for key: MRKey,
+        pipelineId: Int,
+        token: UUID
+    ) {
+        guard let load = manualPipelineActionLoads[key],
+              load.pipelineId == pipelineId,
+              load.token == token,
+              currentDisplayedMR(for: key)?.headPipeline?.id == pipelineId else {
+            return
+        }
+        let actions = ManualPipelineActions(
+            pipelineId: pipelineId,
+            actions: result.actions,
+            buildAffectedStatus: result.buildAffectedStatus
+        )
+        manualPipelineActions[key] = actions
+        manualPipelineActionLoadStates[key] = .loaded(actions)
+    }
+
+    func failManualPipelineActionsLoad(
+        for key: MRKey,
+        pipelineId: Int,
+        token: UUID
+    ) {
+        guard let load = manualPipelineActionLoads[key],
+              load.pipelineId == pipelineId,
+              load.token == token,
+              currentDisplayedMR(for: key)?.headPipeline?.id == pipelineId else {
+            return
+        }
+        manualPipelineActions[key] = nil
+        manualPipelineActionLoadStates[key] = .failed(pipelineId: pipelineId)
+    }
+
+    func testsAreGreen(
+        for key: MRKey,
+        pipelineId: Int?,
+        fallbackPipelineStatus: String?
+    ) -> Bool {
+        guard let pipelineId,
+              case let .loaded(actions)? = manualPipelineActionLoadStates[key],
+              actions.pipelineId == pipelineId else {
+            return false
+        }
+        guard let buildAffectedStatus = actions.buildAffectedStatus else {
+            return fallbackPipelineStatus?.lowercased() == "success"
+        }
+        return buildAffectedStatus == "success"
+    }
+
+    func invalidateManualPipelineActions(for keys: some Sequence<MRKey>) {
+        for key in keys {
+            manualPipelineActions[key] = nil
+            manualPipelineActionLoads[key] = nil
+            manualPipelineActionLoadStates[key] = nil
+        }
+    }
+
+    func isDisplayingMR(key: MRKey) -> Bool {
+        currentDisplayedMR(for: key) != nil
     }
 
     func update(
@@ -182,6 +370,7 @@ final class StateStore {
 
         self.mrs = openedFiltered + newMergedFiltered + retainedPreviousMerged
         self.approvals = approvals
+        discardStaleManualPipelineActions()
         self.events = Array((newEvents + self.events).prefix(maxEvents))
         persistMergedState()
     }
@@ -204,6 +393,24 @@ final class StateStore {
         UserDefaults.standard.set(data, forKey: Self.persistedMergedStateKey)
     }
 
+    private func currentDisplayedMR(for key: MRKey) -> MRSummary? {
+        (mrs + reviewedMRs + reviewableMRs).first {
+            MRKey(projectId: $0.projectId, iid: $0.iid) == key
+        }
+    }
+
+    private func discardStaleManualPipelineActions() {
+        manualPipelineActions = manualPipelineActions.filter { key, value in
+            currentDisplayedMR(for: key)?.headPipeline?.id == value.pipelineId
+        }
+        manualPipelineActionLoads = manualPipelineActionLoads.filter { key, value in
+            currentDisplayedMR(for: key)?.headPipeline?.id == value.pipelineId
+        }
+        manualPipelineActionLoadStates = manualPipelineActionLoadStates.filter { key, value in
+            currentDisplayedMR(for: key)?.headPipeline?.id == value.pipelineId
+        }
+    }
+
     private static func loadPersistedMergedState() -> PersistedMergedState {
         guard let data = UserDefaults.standard.data(forKey: persistedMergedStateKey) else {
             return PersistedMergedState(mergedMRs: [], dismissedKeys: [])
@@ -212,5 +419,33 @@ final class StateStore {
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode(PersistedMergedState.self, from: data))
             ?? PersistedMergedState(mergedMRs: [], dismissedKeys: [])
+    }
+
+    private func persistReviewedMRKeys() {
+        let encoder = JSONEncoder()
+        guard let data = try? encoder.encode(Array(persistedReviewedMRKeys)) else { return }
+        UserDefaults.standard.set(data, forKey: Self.persistedReviewedMRKeysKey)
+    }
+
+    private static func loadPersistedReviewedMRKeys() -> Set<MRKey> {
+        guard let data = UserDefaults.standard.data(forKey: persistedReviewedMRKeysKey),
+              let keys = try? JSONDecoder().decode([MRKey].self, from: data) else {
+            return []
+        }
+        return Set(keys)
+    }
+
+    private func persistDismissedReviewedMRKeys() {
+        let encoder = JSONEncoder()
+        guard let data = try? encoder.encode(Array(dismissedReviewedMRKeys)) else { return }
+        UserDefaults.standard.set(data, forKey: Self.dismissedReviewedMRKeysKey)
+    }
+
+    private static func loadDismissedReviewedMRKeys() -> Set<MRKey> {
+        guard let data = UserDefaults.standard.data(forKey: dismissedReviewedMRKeysKey),
+              let keys = try? JSONDecoder().decode([MRKey].self, from: data) else {
+            return []
+        }
+        return Set(keys)
     }
 }

@@ -17,6 +17,66 @@ struct EmbeddedPipeline: Codable {
     }
 }
 
+struct ManualPipelineAction: Identifiable, Hashable {
+    enum Kind: Hashable {
+        case tests
+        case autoReview
+
+        var title: String {
+            switch self {
+            case .tests: "Lancer les tests"
+            case .autoReview: "Lancer l'auto review"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .tests: "testtube.2"
+            case .autoReview: "wand.and.stars"
+            }
+        }
+    }
+
+    let jobId: Int
+    let kind: Kind
+
+    var id: Int { jobId }
+}
+
+struct PipelineJobActions {
+    let actions: [ManualPipelineAction]
+    let buildAffectedStatus: String?
+}
+
+struct MRAuthor: Codable {
+    let username: String
+    let name: String?
+
+    var shortDisplayName: String {
+        let nameParts = name?
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init) ?? []
+        if let firstName = nameParts.first {
+            guard let lastName = nameParts.dropFirst().first else {
+                return firstName.capitalized
+            }
+            return "\(firstName.capitalized) \(lastName.prefix(1).uppercased())."
+        }
+
+        let usernameParts = username.split { ".-_".contains($0) }
+        guard let firstName = usernameParts.first else { return username }
+        guard let lastName = usernameParts.dropFirst().first else {
+            return String(firstName).capitalized
+        }
+        return "\(String(firstName).capitalized) \(lastName.prefix(1).uppercased())."
+    }
+
+    var fullDescription: String {
+        guard let name, !name.isEmpty else { return username }
+        return "\(name) (\(username))"
+    }
+}
+
 struct MRSummary: Identifiable, Codable {
     let id: Int
     let iid: Int
@@ -32,9 +92,10 @@ struct MRSummary: Identifiable, Codable {
     let divergedCommitsCount: Int?
     let hasConflicts: Bool
     let state: String  // "opened", "merged", "closed"
+    let author: MRAuthor?
 
     enum CodingKeys: String, CodingKey {
-        case id, iid, title, state
+        case id, iid, title, state, author
         case projectId = "project_id"
         case webUrl = "web_url"
         case notesCount = "user_notes_count"
@@ -52,13 +113,25 @@ struct MRApprovals {
     let required: Int
     let given: Int
     let unresolvedThreads: Int
+    let myUnresolvedThreads: Int
+    let otherUnresolvedThreads: Int
+    let firstMyUnresolvedThreadNoteId: Int?
+    let firstOtherUnresolvedThreadNoteId: Int?
+    let isApprovedByMe: Bool
+    let hasCurrentUserComment: Bool
 }
 
 private struct DiscussionResponse: Codable {
     let individualNote: Bool
     let notes: [NoteEntry]
     enum CodingKeys: String, CodingKey { case individualNote = "individual_note"; case notes }
-    struct NoteEntry: Codable { let resolvable: Bool; let resolved: Bool? }
+    struct NoteEntry: Codable {
+        let id: Int
+        let resolvable: Bool
+        let resolved: Bool?
+        let author: Author
+    }
+    struct Author: Codable { let username: String }
 }
 
 private struct ApprovalsResponse: Codable {
@@ -72,6 +145,25 @@ private struct ApprovalsResponse: Codable {
     }
     struct ApprovedByEntry: Codable { let user: ApproverUser }
     struct ApproverUser: Codable { let username: String }
+}
+
+private struct EventResponse: Codable {
+    let actionName: String?
+    let targetType: String?
+    let targetTitle: String?
+    let projectId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case actionName = "action_name"
+        case targetType = "target_type"
+        case targetTitle = "target_title"
+        case projectId = "project_id"
+    }
+}
+
+private struct CommentEventTarget: Hashable {
+    let projectId: Int
+    let title: String
 }
 
 struct SameOriginRedirectPolicy {
@@ -136,6 +228,9 @@ final class GitLabService {
     private let config: ConfigManager
     private let redirectDelegate: SameOriginRedirectDelegate
     private let session: URLSession
+    // Limits project-level title searches after comment events are deduplicated.
+    private static let maximumCommentEventLookupCount = 50
+    private static let commentEventLookupBatchSize = 8
 
     init(config: ConfigManager) {
         self.config = config
@@ -170,6 +265,38 @@ final class GitLabService {
         return try decoder.decode([MRSummary].self, from: data)
     }
 
+    func fetchOpenIndigoMRs() async throws -> [MRSummary] {
+        let pat = await MainActor.run { config.gitlabPAT }
+        guard let pat else { throw MRWatcherError.notConfigured }
+        let host = await MainActor.run { config.gitlabHost }
+
+        var seenKeys: Set<MRKey> = []
+        var mrs: [MRSummary] = []
+        for label in ["Indigo", "indigo"] {
+            let url = try buildURL(host: host, path: "/api/v4/merge_requests", query: [
+                "scope": "all",
+                "state": "opened",
+                "labels": label,
+                "per_page": "50"
+            ])
+            var request = URLRequest(url: url)
+            request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+            let (data, response) = try await session.data(for: request)
+            try validateResponse(response)
+
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            for mr in try decoder.decode([MRSummary].self, from: data) {
+                let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                if seenKeys.insert(key).inserted {
+                    mrs.append(mr)
+                }
+            }
+        }
+        return mrs
+    }
+
     func fetchMyRecentlyMergedMRs() async throws -> [MRSummary] {
         let (pat, username) = await MainActor.run { (config.gitlabPAT, config.gitlabUsername) }
         guard let pat, let username else { throw MRWatcherError.notConfigured }
@@ -193,9 +320,123 @@ final class GitLabService {
         return try decoder.decode([MRSummary].self, from: data)
     }
 
-    func fetchApprovals(projectId: Int, mrIid: Int) async throws -> MRApprovals {
+    func fetchMyCommentedMRKeys(maxPages: Int) async throws -> Set<MRKey> {
         let pat = await MainActor.run { config.gitlabPAT }
         guard let pat else { throw MRWatcherError.notConfigured }
+        let host = await MainActor.run { config.gitlabHost }
+        guard maxPages > 0 else { return [] }
+
+        var targets: Set<CommentEventTarget> = []
+        for page in 1...maxPages {
+            let url = try buildURL(host: host, path: "/api/v4/events", query: [
+                "action": "commented",
+                "per_page": "100",
+                "page": String(page)
+            ])
+            var request = URLRequest(url: url)
+            request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+            let (data, response) = try await session.data(for: request)
+            try validateResponse(response)
+
+            let events = try JSONDecoder().decode([EventResponse].self, from: data)
+            targets.formUnion(events.compactMap { event in
+                let actionName = event.actionName?.lowercased() ?? ""
+                let targetType = event.targetType?
+                    .lowercased()
+                    .replacingOccurrences(of: "_", with: "") ?? ""
+                guard actionName.hasPrefix("commented"),
+                      ["diffnote", "discussionnote", "note"].contains(targetType),
+                      let projectId = event.projectId,
+                      let targetTitle = event.targetTitle?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                      projectId > 0,
+                      !targetTitle.isEmpty else {
+                    return nil
+                }
+                return CommentEventTarget(projectId: projectId, title: targetTitle)
+            })
+
+            if events.count < 100 { break }
+        }
+
+        var keys: Set<MRKey> = []
+        let sortedTargets = targets.sorted {
+            $0.projectId == $1.projectId
+                ? $0.title < $1.title
+                : $0.projectId < $1.projectId
+        }
+        let targetsToResolve = Array(
+            sortedTargets.prefix(Self.maximumCommentEventLookupCount)
+        )
+        for batchStart in stride(
+            from: 0,
+            to: targetsToResolve.count,
+            by: Self.commentEventLookupBatchSize
+        ) {
+            let batchEnd = min(
+                batchStart + Self.commentEventLookupBatchSize,
+                targetsToResolve.count
+            )
+            let batch = targetsToResolve[batchStart..<batchEnd]
+            let resolvedKeys = await withTaskGroup(of: MRKey?.self) { group in
+                for target in batch {
+                    group.addTask { [self] in
+                        try? await resolveOpenMRKey(
+                            projectId: target.projectId,
+                            title: target.title,
+                            host: host,
+                            pat: pat
+                        )
+                    }
+                }
+
+                var batchKeys: [MRKey] = []
+                for await key in group {
+                    if let key {
+                        batchKeys.append(key)
+                    }
+                }
+                return batchKeys
+            }
+            keys.formUnion(resolvedKeys)
+        }
+        return keys
+    }
+
+    private func resolveOpenMRKey(
+        projectId: Int,
+        title: String,
+        host: String,
+        pat: String
+    ) async throws -> MRKey? {
+        let url = try buildURL(
+            host: host,
+            path: "/api/v4/projects/\(projectId)/merge_requests",
+            query: [
+                "state": "opened",
+                "search": title,
+                "per_page": "100"
+            ]
+        )
+        var request = URLRequest(url: url)
+        request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let matches = try decoder.decode([MRSummary].self, from: data).filter {
+            $0.title == title
+        }
+        guard matches.count == 1, let match = matches.first else { return nil }
+        return MRKey(projectId: match.projectId, iid: match.iid)
+    }
+
+    func fetchApprovals(projectId: Int, mrIid: Int) async throws -> MRApprovals {
+        let (pat, username) = await MainActor.run { (config.gitlabPAT, config.gitlabUsername) }
+        guard let pat, let username else { throw MRWatcherError.notConfigured }
         let host = await MainActor.run { config.gitlabHost }
 
         let approvalsUrl = try buildURL(
@@ -209,25 +450,16 @@ final class GitLabService {
             return r
         }()
 
-        let discussionsUrl = try buildURL(
-            host: host,
-            path: "/api/v4/projects/\(projectId)/merge_requests/\(mrIid)/discussions",
-            query: ["per_page": "100"]
-        )
-        let discussionsRequest = {
-            var r = URLRequest(url: discussionsUrl)
-            r.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
-            return r
-        }()
-
         async let approvalsResult = session.data(for: approvalsRequest)
-        async let discussionsResult = session.data(for: discussionsRequest)
+        async let discussionsResult = fetchAllDiscussions(
+            projectId: projectId,
+            mrIid: mrIid,
+            host: host,
+            pat: pat
+        )
 
         let (approvalsData, approvalsResponse) = try await approvalsResult
         try validateResponse(approvalsResponse)
-
-        let (discussionsData, discussionsResponse) = try await discussionsResult
-        try validateResponse(discussionsResponse)
 
         let decoded = try JSONDecoder().decode(ApprovalsResponse.self, from: approvalsData)
         let humanApprovals = decoded.approvedBy.filter { entry in
@@ -235,21 +467,92 @@ final class GitLabService {
             return !u.contains("_bot_") && !u.hasSuffix("-bot") && !u.hasPrefix("bot-")
         }
 
-        let discussions = try JSONDecoder().decode([DiscussionResponse].self, from: discussionsData)
-        let unresolvedCount = discussions.filter { discussion in
+        let discussions = try await discussionsResult
+        let hasCurrentUserComment = discussions.contains { discussion in
+            discussion.notes.contains {
+                $0.author.username.caseInsensitiveCompare(username) == .orderedSame
+            }
+        }
+        var myUnresolvedThreads = 0
+        var otherUnresolvedThreads = 0
+        var firstMyUnresolvedThreadNoteId: Int?
+        var firstOtherUnresolvedThreadNoteId: Int?
+        for discussion in discussions {
             guard !discussion.individualNote,
                   let firstNote = discussion.notes.first,
-                  firstNote.resolvable else { return false }
-            return firstNote.resolved == false
-        }.count
+                  firstNote.resolvable,
+                  firstNote.resolved == false else {
+                continue
+            }
+
+            if firstNote.author.username.caseInsensitiveCompare(username) == .orderedSame {
+                myUnresolvedThreads += 1
+                if firstMyUnresolvedThreadNoteId == nil {
+                    firstMyUnresolvedThreadNoteId = firstNote.id
+                }
+            } else {
+                otherUnresolvedThreads += 1
+                if firstOtherUnresolvedThreadNoteId == nil {
+                    firstOtherUnresolvedThreadNoteId = firstNote.id
+                }
+            }
+        }
 
         let given = humanApprovals.count
         let required = given + decoded.approvalsLeft
         return MRApprovals(
             required: required,
             given: given,
-            unresolvedThreads: unresolvedCount
+            unresolvedThreads: myUnresolvedThreads + otherUnresolvedThreads,
+            myUnresolvedThreads: myUnresolvedThreads,
+            otherUnresolvedThreads: otherUnresolvedThreads,
+            firstMyUnresolvedThreadNoteId: firstMyUnresolvedThreadNoteId,
+            firstOtherUnresolvedThreadNoteId: firstOtherUnresolvedThreadNoteId,
+            isApprovedByMe: decoded.approvedBy.contains {
+                $0.user.username.caseInsensitiveCompare(username) == .orderedSame
+            },
+            hasCurrentUserComment: hasCurrentUserComment
         )
+    }
+
+    private func fetchAllDiscussions(
+        projectId: Int,
+        mrIid: Int,
+        host: String,
+        pat: String
+    ) async throws -> [DiscussionResponse] {
+        var discussions: [DiscussionResponse] = []
+        var requestedPages: Set<Int> = []
+        var page = 1
+
+        while requestedPages.insert(page).inserted {
+            let url = try buildURL(
+                host: host,
+                path: "/api/v4/projects/\(projectId)/merge_requests/\(mrIid)/discussions",
+                query: [
+                    "page": String(page),
+                    "per_page": "100"
+                ]
+            )
+            var request = URLRequest(url: url)
+            request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+            let (data, response) = try await session.data(for: request)
+            try validateResponse(response)
+            discussions += try JSONDecoder().decode([DiscussionResponse].self, from: data)
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let nextPageHeader = httpResponse.value(forHTTPHeaderField: "X-Next-Page")?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  let nextPage = Int(nextPageHeader),
+                  nextPage > 0,
+                  !requestedPages.contains(nextPage) else {
+                break
+            }
+            page = nextPage
+        }
+
+        return discussions
     }
 
     func fetchMRDetail(projectId: Int, mrIid: Int) async throws -> MRSummary {
@@ -273,29 +576,87 @@ final class GitLabService {
         return try decoder.decode(MRSummary.self, from: data)
     }
 
-    func findBuildAffectedJob(projectId: Int, pipelineId: Int) async throws -> (id: Int, status: String)? {
+    func fetchManualPipelineActions(
+        projectId: Int,
+        pipelineId: Int
+    ) async throws -> PipelineJobActions {
         let pat = await MainActor.run { config.gitlabPAT }
         guard let pat else { throw MRWatcherError.notConfigured }
         let host = await MainActor.run { config.gitlabHost }
-
-        let url = try buildURL(
-            host: host,
-            path: "/api/v4/projects/\(projectId)/pipelines/\(pipelineId)/jobs",
-            query: ["per_page": "100"]
-        )
-        var request = URLRequest(url: url)
-        request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
-
-        let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
 
         struct JobEntry: Codable {
             let id: Int
             let name: String
             let status: String
         }
-        let jobs = try JSONDecoder().decode([JobEntry].self, from: data)
-        return jobs.first { $0.name == "build affected" }.map { ($0.id, $0.status) }
+
+        var actions: [ManualPipelineAction] = []
+        var buildAffectedStatus: String?
+        var requestedPages: Set<Int> = []
+        var page = 1
+
+        while requestedPages.insert(page).inserted {
+            let url = try buildURL(
+                host: host,
+                path: "/api/v4/projects/\(projectId)/pipelines/\(pipelineId)/jobs",
+                query: [
+                    "page": String(page),
+                    "per_page": "100"
+                ]
+            )
+            var request = URLRequest(url: url)
+            request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+            let (data, response) = try await session.data(for: request)
+            try validateResponse(response)
+
+            let jobs = try JSONDecoder().decode([JobEntry].self, from: data)
+            if let buildAffectedJob = jobs.first(where: {
+                $0.name.caseInsensitiveCompare("build affected") == .orderedSame
+            }) {
+                buildAffectedStatus = buildAffectedJob.status.lowercased()
+            }
+            actions += jobs.compactMap { job in
+                guard job.status.lowercased() == "manual" else {
+                    return nil
+                }
+                switch job.name.lowercased() {
+                case "build affected":
+                    return ManualPipelineAction(jobId: job.id, kind: .tests)
+                case "auto review":
+                    return ManualPipelineAction(jobId: job.id, kind: .autoReview)
+                default:
+                    return nil
+                }
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let nextPageHeader = httpResponse.value(forHTTPHeaderField: "X-Next-Page")?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  let nextPage = Int(nextPageHeader),
+                  nextPage > 0,
+                  !requestedPages.contains(nextPage) else {
+                break
+            }
+            page = nextPage
+        }
+
+        return PipelineJobActions(
+            actions: actions,
+            buildAffectedStatus: buildAffectedStatus
+        )
+    }
+
+    func findBuildAffectedJob(projectId: Int, pipelineId: Int) async throws -> (id: Int, status: String)? {
+        let result = try await fetchManualPipelineActions(
+            projectId: projectId,
+            pipelineId: pipelineId
+        )
+        guard let action = result.actions.first(where: { $0.kind == .tests }),
+              let status = result.buildAffectedStatus else {
+            return nil
+        }
+        return (action.jobId, status)
     }
 
     func playJob(projectId: Int, jobId: Int) async throws {
@@ -321,6 +682,22 @@ final class GitLabService {
         request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["body": "/rebase"])
+        let (_, response) = try await session.data(for: request)
+        try validateResponse(response)
+    }
+
+    func approve(projectId: Int, mrIid: Int) async throws {
+        let pat = await MainActor.run { config.gitlabPAT }
+        guard let pat else { throw MRWatcherError.notConfigured }
+        let host = await MainActor.run { config.gitlabHost }
+        let url = try buildURL(
+            host: host,
+            path: "/api/v4/projects/\(projectId)/merge_requests/\(mrIid)/approve",
+            query: [:]
+        )
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
         let (_, response) = try await session.data(for: request)
         try validateResponse(response)
     }

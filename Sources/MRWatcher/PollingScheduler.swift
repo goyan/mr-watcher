@@ -6,7 +6,23 @@ final class PollingScheduler {
     private let gitlab: GitLabService
     private let jira: JiraService
     private var task: Task<Void, Never>?
+    private var manualPipelineActionsTask: Task<Void, Never>?
     private var shouldBootstrapRecentlyMergedMRs = true
+    private var shouldBootstrapReviewedMRs = true
+    private var reviewedRefreshCursor = 0
+    private static var latestJiraPublicationToken = UUID()
+
+    // Bootstrap samples recent comment history without unbounded periodic scans.
+    private static let reviewedEventsBootstrapPageLimit = 3
+    private static let reviewedEventsPollingPageLimit = 1
+    private static let reviewedMRDetailLimit = 50
+    private static let newlyDiscoveredReviewDetailLimit = 10
+    private static let manualPipelineActionMRLimit = 30
+    private static let manualPipelineActionConcurrencyLimit = 4
+
+    private struct PollResult {
+        let reviewedRefreshCursor: Int
+    }
 
     private var intervalSeconds: Int {
         max(15, UserDefaults.standard.integer(forKey: "pollIntervalSeconds").atLeast(60))
@@ -22,29 +38,41 @@ final class PollingScheduler {
         stop()
         task = Task { [weak self, store, gitlab, jira] in
             while !Task.isCancelled {
-                let shouldBootstrapRecentlyMergedMRs = await MainActor.run {
-                    self?.shouldBootstrapRecentlyMergedMRs ?? false
+                guard let self else { return }
+                let pollState = await MainActor.run {
+                    (self.shouldBootstrapRecentlyMergedMRs,
+                     self.shouldBootstrapReviewedMRs,
+                     self.reviewedRefreshCursor)
                 }
-                let didComplete = await PollingScheduler.poll(
+                let result = await self.poll(
                     store: store,
                     gitlab: gitlab,
                     jira: jira,
-                    shouldBootstrapRecentlyMergedMRs: shouldBootstrapRecentlyMergedMRs
+                    shouldBootstrapRecentlyMergedMRs: pollState.0,
+                    shouldBootstrapReviewedMRs: pollState.1,
+                    reviewedRefreshCursor: pollState.2
                 )
-                if didComplete {
+                if let result {
                     await MainActor.run {
-                        self?.shouldBootstrapRecentlyMergedMRs = false
+                        self.shouldBootstrapRecentlyMergedMRs = false
+                        self.shouldBootstrapReviewedMRs = false
+                        self.reviewedRefreshCursor = result.reviewedRefreshCursor
                     }
                 }
                 let intervalSeconds = await MainActor.run {
-                    self?.intervalSeconds ?? 60
+                    self.intervalSeconds
                 }
                 try? await Task.sleep(for: .seconds(Double(intervalSeconds)))
             }
         }
     }
 
-    func stop() { task?.cancel(); task = nil }
+    func stop() {
+        task?.cancel()
+        task = nil
+        manualPipelineActionsTask?.cancel()
+        manualPipelineActionsTask = nil
+    }
 
     func restart() {
         start()
@@ -52,6 +80,145 @@ final class PollingScheduler {
 
     func rebase(projectId: Int, mrIid: Int) async throws {
         try await gitlab.rebase(projectId: projectId, mrIid: mrIid)
+    }
+
+    func approve(projectId: Int, mrIid: Int) async throws {
+        try await gitlab.approve(projectId: projectId, mrIid: mrIid)
+    }
+
+    func refresh(projectId: Int, mrIid: Int) async {
+        let key = MRKey(projectId: projectId, iid: mrIid)
+        guard !store.refreshingMRKeys.contains(key) else { return }
+        store.refreshingMRKeys.insert(key)
+        store.invalidateManualPipelineActions(for: [key])
+        defer { store.refreshingMRKeys.remove(key) }
+
+        do {
+            let detail = try await gitlab.fetchMRDetail(projectId: projectId, mrIid: mrIid)
+            async let approvals = gitlab.fetchApprovals(projectId: projectId, mrIid: mrIid)
+            store.updateRefreshedMR(
+                detail,
+                approvals: try await approvals
+            )
+            store.lastError = nil
+            store.lastErrorIsAuth = false
+
+            scheduleManualPipelineActions(for: [key: detail])
+            Task { [weak self] in
+                guard let self else { return }
+                await self.refreshJiraStatus(for: key)
+            }
+        } catch {
+            store.lastError = "Actualisation !\(mrIid) : \(error.localizedDescription)"
+            store.lastErrorIsAuth = {
+                if case .unauthorized = error as? MRWatcherError { return true }
+                return false
+            }()
+        }
+    }
+
+    func playManualPipelineAction(
+        _ action: ManualPipelineAction,
+        projectId: Int,
+        mrIid: Int
+    ) async {
+        guard !store.launchingManualPipelineJobIds.contains(action.jobId) else { return }
+        store.launchingManualPipelineJobIds.insert(action.jobId)
+        defer { store.launchingManualPipelineJobIds.remove(action.jobId) }
+
+        do {
+            try await gitlab.playJob(projectId: projectId, jobId: action.jobId)
+            await refresh(projectId: projectId, mrIid: mrIid)
+        } catch {
+            store.lastError = "\(action.kind.title) !\(mrIid) : \(error.localizedDescription)"
+            store.lastErrorIsAuth = {
+                if case .unauthorized = error as? MRWatcherError { return true }
+                return false
+            }()
+        }
+    }
+
+    private func refreshJiraStatus(for key: MRKey) async {
+        guard jira.isAvailable,
+              let mr = (store.mrs + store.reviewedMRs + store.reviewableMRs).first(where: {
+                  MRKey(projectId: $0.projectId, iid: $0.iid) == key
+              }),
+              let issueKey = extractProdTicket(from: mr),
+              let status = try? await jira.fetchIssueStatus(issueKey: issueKey),
+              store.isDisplayingMR(key: key) else {
+            return
+        }
+        store.jiraStatuses[key] = status
+    }
+
+    private func loadManualPipelineActions(for mr: MRSummary, key: MRKey) async {
+        guard !Task.isCancelled,
+              let pipelineId = mr.headPipeline?.id,
+              let token = store.beginManualPipelineActionsLoad(
+                  for: key,
+                  pipelineId: pipelineId
+              ) else {
+            return
+        }
+        do {
+            let result = try await gitlab.fetchManualPipelineActions(
+                projectId: key.projectId,
+                pipelineId: pipelineId
+            )
+            guard !Task.isCancelled else { return }
+            store.updateManualPipelineActions(
+                result,
+                for: key,
+                pipelineId: pipelineId,
+                token: token
+            )
+        } catch {
+            store.failManualPipelineActionsLoad(
+                for: key,
+                pipelineId: pipelineId,
+                token: token
+            )
+        }
+    }
+
+    private func scheduleManualPipelineActions(for actionMRs: [MRKey: MRSummary]) {
+        manualPipelineActionsTask?.cancel()
+        store.invalidateManualPipelineActions(for: actionMRs.keys)
+
+        let mrsToLoad = actionMRs
+            .sorted { lhs, rhs in
+                lhs.key.projectId == rhs.key.projectId
+                    ? lhs.key.iid < rhs.key.iid
+                    : lhs.key.projectId < rhs.key.projectId
+            }
+            .prefix(Self.manualPipelineActionMRLimit)
+
+        manualPipelineActionsTask = Task { [weak self] in
+            guard let self else { return }
+
+            for batchStart in stride(
+                from: 0,
+                to: mrsToLoad.count,
+                by: Self.manualPipelineActionConcurrencyLimit
+            ) {
+                guard !Task.isCancelled else { return }
+                let batchEnd = min(
+                    batchStart + Self.manualPipelineActionConcurrencyLimit,
+                    mrsToLoad.count
+                )
+                let batch = mrsToLoad[batchStart..<batchEnd]
+
+                await withTaskGroup(of: Void.self) { group in
+                    for (key, mr) in batch {
+                        group.addTask { [weak self] in
+                            guard !Task.isCancelled, let self else { return }
+                            await self.loadManualPipelineActions(for: mr, key: key)
+                        }
+                    }
+                    await group.waitForAll()
+                }
+            }
+        }
     }
 
     func triggerBuildAffected(projectId: Int, mrIid: Int, oldPipelineId: Int?) async {
@@ -100,29 +267,59 @@ final class PollingScheduler {
 
     func pollNow() async {
         guard !store.isLoading else { return }
-        let didComplete = await PollingScheduler.poll(
+        let result = await poll(
             store: store,
             gitlab: gitlab,
             jira: jira,
-            shouldBootstrapRecentlyMergedMRs: shouldBootstrapRecentlyMergedMRs
+            shouldBootstrapRecentlyMergedMRs: shouldBootstrapRecentlyMergedMRs,
+            shouldBootstrapReviewedMRs: shouldBootstrapReviewedMRs,
+            reviewedRefreshCursor: reviewedRefreshCursor
         )
-        if didComplete {
+        if let result {
             shouldBootstrapRecentlyMergedMRs = false
+            shouldBootstrapReviewedMRs = false
+            reviewedRefreshCursor = result.reviewedRefreshCursor
         }
     }
 
-    private static func poll(
+    private func poll(
         store: StateStore,
         gitlab: GitLabService,
         jira: JiraService,
-        shouldBootstrapRecentlyMergedMRs: Bool
-    ) async -> Bool {
+        shouldBootstrapRecentlyMergedMRs: Bool,
+        shouldBootstrapReviewedMRs: Bool,
+        reviewedRefreshCursor: Int
+    ) async -> PollResult? {
         await MainActor.run { store.isLoading = true; store.lastError = nil; store.lastErrorIsAuth = false }
         do {
             let mrs = try await gitlab.fetchMyOpenMRs()
             let recentlyMergedMRs = shouldBootstrapRecentlyMergedMRs
                 ? try await gitlab.fetchMyRecentlyMergedMRs()
                 : []
+            let eventPageLimit = shouldBootstrapReviewedMRs
+                ? Self.reviewedEventsBootstrapPageLimit
+                : Self.reviewedEventsPollingPageLimit
+            let eventReviewedKeys = (try? await gitlab.fetchMyCommentedMRKeys(
+                maxPages: eventPageLimit
+            )) ?? []
+            let persistedReviewedKeys = await MainActor.run {
+                store.currentReviewedMRKeys()
+            }
+            let dismissedReviewedKeys = await MainActor.run {
+                store.currentDismissedReviewedMRKeys()
+            }
+            let previousReviewedMRs = await MainActor.run {
+                store.reviewedMRs
+            }
+            let previousReviewStatuses = await MainActor.run {
+                store.reviewStatuses
+            }
+            let previousReviewableMRs = await MainActor.run {
+                store.reviewableMRs
+            }
+            let previousReviewableStatuses = await MainActor.run {
+                store.reviewableStatuses
+            }
 
             // Snapshot opened keys before this poll so we can detect disappearances
             let previousOpenedKeys = await MainActor.run {
@@ -136,7 +333,7 @@ final class PollingScheduler {
             var enrichedMRs: [MRSummary] = []
             var mergedMRs: [MRSummary] = recentlyMergedMRs
             for mr in mrs {
-                if Task.isCancelled { return false }
+                if Task.isCancelled { return nil }
                 let key = MRKey(projectId: mr.projectId, iid: mr.iid)
                 let detailed = (try? await gitlab.fetchMRDetail(projectId: mr.projectId, mrIid: mr.iid)) ?? mr
                 if detailed.state == "merged" {
@@ -149,11 +346,144 @@ final class PollingScheduler {
                 }
             }
 
+            let authoredMRKeys = Set(mrs.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
+            let reviewedKeys = Set(
+                persistedReviewedKeys
+                    .union(eventReviewedKeys)
+                    .filter { $0.projectId > 0 && $0.iid > 0 }
+            )
+            .subtracting(authoredMRKeys)
+            .subtracting(dismissedReviewedKeys)
+            var reviewedMRsByKey = Dictionary(
+                uniqueKeysWithValues: previousReviewedMRs.compactMap { mr in
+                    let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                    return reviewedKeys.contains(key) ? (key, mr) : nil
+                }
+            )
+            var reviewStatuses = previousReviewStatuses.filter {
+                reviewedKeys.contains($0.key)
+            }
+            var retainedReviewedKeys = reviewedKeys
+            let newlyCommentedKeys: Set<MRKey> = eventReviewedKeys.subtracting(
+                persistedReviewedKeys
+            )
+            let newReviewedKeySet: Set<MRKey> = newlyCommentedKeys.intersection(
+                reviewedKeys
+            )
+            let newReviewedKeys = newReviewedKeySet
+                .sorted {
+                    $0.projectId == $1.projectId
+                        ? $0.iid < $1.iid
+                        : $0.projectId < $1.projectId
+                }
+            let existingReviewedKeySet: Set<MRKey> = reviewedKeys.subtracting(
+                Set(newReviewedKeys)
+            )
+            let existingReviewedKeys = existingReviewedKeySet
+                .sorted {
+                    $0.projectId == $1.projectId
+                        ? $0.iid < $1.iid
+                        : $0.projectId < $1.projectId
+                }
+            let boundedCursor = existingReviewedKeys.isEmpty
+                ? 0
+                : reviewedRefreshCursor % existingReviewedKeys.count
+            let rotatedExistingKeys = Array(existingReviewedKeys[boundedCursor...])
+                + Array(existingReviewedKeys[..<boundedCursor])
+            let newKeysToRefresh = Array(
+                newReviewedKeys.prefix(Self.newlyDiscoveredReviewDetailLimit)
+            )
+            let existingCapacity = Self.reviewedMRDetailLimit - newKeysToRefresh.count
+            let existingKeysToRefresh = Array(
+                rotatedExistingKeys.prefix(existingCapacity)
+            )
+            let refreshKeys = newKeysToRefresh + existingKeysToRefresh
+            let nextReviewedRefreshCursor = existingReviewedKeys.isEmpty
+                ? 0
+                : (boundedCursor + existingKeysToRefresh.count) % existingReviewedKeys.count
+            for key in refreshKeys {
+                if Task.isCancelled { return nil }
+                do {
+                    let detail = try await gitlab.fetchMRDetail(
+                        projectId: key.projectId,
+                        mrIid: key.iid
+                    )
+                    guard detail.state == "opened" else {
+                        retainedReviewedKeys.remove(key)
+                        reviewedMRsByKey[key] = nil
+                        reviewStatuses[key] = nil
+                        continue
+                    }
+                    reviewedMRsByKey[key] = detail
+                    if let status = try? await gitlab.fetchApprovals(
+                        projectId: key.projectId,
+                        mrIid: key.iid
+                    ) {
+                        guard status.hasCurrentUserComment else {
+                            retainedReviewedKeys.remove(key)
+                            reviewedMRsByKey[key] = nil
+                            reviewStatuses[key] = nil
+                            continue
+                        }
+                        reviewStatuses[key] = status
+                    } else if let previousStatus = previousReviewStatuses[key] {
+                        reviewStatuses[key] = previousStatus
+                    }
+                } catch {
+                    if case MRWatcherError.invalidResponse(404) = error {
+                        retainedReviewedKeys.remove(key)
+                        reviewedMRsByKey[key] = nil
+                        reviewStatuses[key] = nil
+                        continue
+                    }
+                }
+            }
+            let reviewedMRs = reviewedMRsByKey.values.sorted {
+                $0.createdAt > $1.createdAt
+            }
+
+            var reviewableMRs = previousReviewableMRs
+            var reviewableStatuses = previousReviewableStatuses
+            if let indigoMRs = try? await gitlab.fetchOpenIndigoMRs() {
+                let username = await MainActor.run {
+                    ConfigManager.shared.gitlabUsername ?? ""
+                }
+                let candidates = indigoMRs.filter { mr in
+                    guard !mr.isDraft,
+                          !retainedReviewedKeys.contains(
+                            MRKey(projectId: mr.projectId, iid: mr.iid)
+                          ) else {
+                        return false
+                    }
+                    return mr.author?.username.caseInsensitiveCompare(username) != .orderedSame
+                }
+
+                reviewableMRs = []
+                reviewableStatuses = [:]
+                for mr in candidates {
+                    if Task.isCancelled { return nil }
+                    let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                    let detailed = (try? await gitlab.fetchMRDetail(
+                        projectId: mr.projectId,
+                        mrIid: mr.iid
+                    )) ?? mr
+                    reviewableMRs.append(detailed)
+                    if let status = try? await gitlab.fetchApprovals(
+                        projectId: mr.projectId,
+                        mrIid: mr.iid
+                    ) {
+                        reviewableStatuses[key] = status
+                    } else if let previousStatus = previousReviewableStatuses[key] {
+                        reviewableStatuses[key] = previousStatus
+                    }
+                }
+            }
+
             // Detect MRs that disappeared from the opened list and fetch their real state
             let newKeys = Set(mrs.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
             let disappearedKeys = previousOpenedKeys.subtracting(newKeys)
             for key in disappearedKeys {
-                if Task.isCancelled { return false }
+                if Task.isCancelled { return nil }
                 if let detail = try? await gitlab.fetchMRDetail(projectId: key.projectId, mrIid: key.iid),
                    detail.state == "merged" {
                     mergedMRs.append(detail)
@@ -161,16 +491,53 @@ final class PollingScheduler {
                 // If state == "closed" → ignore silently
             }
 
+            let jiraPublicationToken = UUID()
+            await MainActor.run {
+                store.update(
+                    mrs: enrichedMRs,
+                    mergedMRs: mergedMRs,
+                    approvals: approvals,
+                    notifyAboutMerges: !shouldBootstrapRecentlyMergedMRs
+                )
+                store.replaceReviewedMRKeys(retainedReviewedKeys)
+                store.updateReviewedMRs(reviewedMRs, statuses: reviewStatuses)
+                store.updateReviewableMRs(reviewableMRs, statuses: reviewableStatuses)
+                // Jira runs after the GitLab result is visible, so grouping initially
+                // falls back to the non-Jira order instead of blocking the first render.
+                store.jiraStatuses = [:]
+                store.isLoading = false
+                store.lastSuccessfulPollAt = Date()
+                Self.latestJiraPublicationToken = jiraPublicationToken
+            }
+
+            let actionMRs = Dictionary(
+                (enrichedMRs + reviewedMRs + reviewableMRs).map {
+                    (MRKey(projectId: $0.projectId, iid: $0.iid), $0)
+                },
+                uniquingKeysWith: { latest, _ in latest }
+            )
+            await MainActor.run {
+                self.scheduleManualPipelineActions(for: actionMRs)
+            }
+
+            let jiraMRs = Dictionary(
+                (
+                    enrichedMRs
+                        + mergedMRs
+                        + retainedMergedMRs
+                        + reviewedMRs
+                        + reviewableMRs
+                ).map {
+                    (MRKey(projectId: $0.projectId, iid: $0.iid), $0)
+                },
+                uniquingKeysWith: { latest, _ in latest }
+            ).values
             var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
             if jira.isAvailable {
-                let jiraMRs = Dictionary(
-                    (enrichedMRs + mergedMRs + retainedMergedMRs).map {
-                        (MRKey(projectId: $0.projectId, iid: $0.iid), $0)
-                    },
-                    uniquingKeysWith: { latest, _ in latest }
-                ).values
                 for mr in jiraMRs {
-                    if Task.isCancelled { return false }
+                    if Task.isCancelled {
+                        return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
+                    }
                     guard let issueKey = extractProdTicket(from: mr) else { continue }
                     let key = MRKey(projectId: mr.projectId, iid: mr.iid)
                     if let status = try? await jira.fetchIssueStatus(issueKey: issueKey) {
@@ -180,24 +547,24 @@ final class PollingScheduler {
             }
 
             await MainActor.run {
-                store.update(
-                    mrs: enrichedMRs,
-                    mergedMRs: mergedMRs,
-                    approvals: approvals,
-                    notifyAboutMerges: !shouldBootstrapRecentlyMergedMRs
+                guard Self.latestJiraPublicationToken == jiraPublicationToken else { return }
+                let displayedKeys = Set(
+                    (store.mrs + store.reviewedMRs + store.reviewableMRs).map {
+                        MRKey(projectId: $0.projectId, iid: $0.iid)
+                    }
                 )
-                store.jiraStatuses = newJiraStatuses
-                store.isLoading = false
-                store.lastSuccessfulPollAt = Date()
+                store.jiraStatuses = newJiraStatuses.filter {
+                    displayedKeys.contains($0.key)
+                }
             }
-            return true
+            return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
         } catch {
             await MainActor.run {
                 store.lastError = error.localizedDescription
                 store.lastErrorIsAuth = { if case .unauthorized = error as? MRWatcherError { return true }; return false }()
                 store.isLoading = false
             }
-            return false
+            return nil
         }
     }
 }

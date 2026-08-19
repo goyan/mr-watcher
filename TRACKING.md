@@ -142,3 +142,30 @@
 | Actions | ✅ refresh, `/rebase` confirmé, retrait, événements, réglages, mise à jour et sortie préservés |
 | Feedback | ✅ survol de la MR et des actions contextuelles |
 | Validation | ✅ build release, 5 tests runtime et installation locale |
+
+---
+
+## Session 2026-08-19
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| Suivi des MRs commentées | ✅ Onglet « Mes revues » dans la fenêtre principale et le panneau de barre de menus |
+| Signaux de décision | ✅ CI, conflits, retard de commits, approbations, threads personnels et autres threads ouverts |
+| Approbation manuelle | ✅ action GitLab confirmée, visible seulement sans thread personnel ouvert et sans approbation existante |
+| Navigation de thread | ✅ boutons « Mes fils » et « autres » avec survol, ouvrent l'ancre GitLab du premier fil non résolu correspondant |
+| Cycle de vie des revues | ✅ suppression automatique si tous les commentaires personnels sont supprimés, croix de masquage persistante |
+| Approbation | ✅ statut `Approved` vert après approbation personnelle |
+| File à revoir | ✅ onglet `À revoir` pour les MRs `Indigo`/`indigo` ouvertes, non-Draft, d'autres auteurs |
+| Priorisation Jira | ✅ groupes `To Review` puis `Les autres` dans les onglets de revue, avec statut texte visible |
+| Enrichissement Jira différé | ✅ données GitLab publiées immédiatement ; les statuts Jira reclassent les listes à leur arrivée, avec rejet des réponses périmées |
+| Cohérence des vues | ✅ cartes « Mes MRs » alignées sur les revues ; pied « À revoir » détaille total Indigo, `To Review` et `Les autres` |
+| Finitions des cartes | ✅ chargement initial explicite, ticket Jira près de l’identification, auteur court `Prénom N.` dans toutes les listes |
+| Découverte et charge | ✅ événements GitLab paginés et bornés, résolution des titres par lots de 8, MRs ouvertes persistées, rafraîchissement équitable par rotation |
+| Robustesse | ✅ conservation du dernier état lors d'une erreur transitoire, éviction des MRs fermées ou introuvables |
+| Validation technique | ✅ `swift build -c release` et `swift test` (5 tests), application installée et 6 revues réelles visibles dans les deux vues |
+| Actions ciblées | ✅ bouton de rafraîchissement individuel sur chaque MR, avec chargement local sans cycle global |
+| Approbation « À revoir » | ✅ action GitLab disponible selon les mêmes critères d’éligibilité que « Mes revues », sans action de masquage |
+| Actions pipeline | ✅ lancement des jobs manuels `build affected` et `auto review`, avec pagination, annulation et garde de pipeline courant |
+| Garde d'approbation | ✅ approbation après tests vérifiés/verts ; auto review indépendante dès que son job est manuel |

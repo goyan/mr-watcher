@@ -1,7 +1,7 @@
 # MR Watcher — Product Requirements
 
-App macOS menu bar pour surveiller les MRs GitLab Millenium de l'auteur configuré.
-Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour review/rebase/CI.
+App macOS menu bar pour surveiller les MRs GitLab Millenium de l'auteur configuré et ses revues en cours.
+Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour review/rebase/CI ou peut etre approuvee.
 
 ---
 
@@ -23,6 +23,17 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F10 | Date de merge affichée avec âge inline (`Mergée: Xj`) et tooltip date complète en StatusView | ✅ done |
 | F11 | MRs mergées conservées après redémarrage, jusqu'à `Retirer` | ✅ done |
 | F12 | 10 dernières MRs mergées chargées depuis GitLab au démarrage | ✅ done |
+| F13 | Onglet « Mes revues » : MRs ouvertes où l'utilisateur a commenté, avec auteur, statut Jira, CI, conflits, retard, approbations et threads personnels/autres | ✅ done |
+| F14 | Découverte des revues depuis les événements GitLab, conservation locale des MRs encore ouvertes et rafraîchissement borné par rotation | ✅ done |
+| F15 | Compteurs de threads personnels et externes actionnables : ouvrent directement le premier fil non résolu correspondant dans GitLab | ✅ done |
+| F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant le label `Indigo` ou `indigo` | ✅ done |
+| F17 | Priorisation des revues par statut Jira : sections `To Review` (`Code review` inclus) et `Les autres` | ✅ done |
+| F18 | Affichage GitLab immédiat des revues, puis enrichissement et regroupement Jira asynchrones | ✅ done |
+| F19 | Vue « Mes MRs » homogénéisée avec les cartes de revue, et total Indigo détaillé par statut Jira | ✅ done |
+| F20 | Chargement initial explicite, ticket Jira intégré aux métadonnées et auteur affiché en `Prénom N.` | ✅ done |
+| F21 | Rafraîchissement individuel d'une MR, avec mise à jour GitLab puis Jira sans poll global | ✅ done |
+| F22 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
+| F23 | Approbation bloquée jusqu'aux tests `build affected` verts, auto review indépendante | ✅ done |
 
 ### Actions
 
@@ -32,6 +43,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | A2 | `/rebase` via API GitLab (sans perdre les approbations) | ✅ done |
 | A3 | Rafraîchir manuellement | ✅ done |
 | A4 | Intervalle de poll réglable depuis l'UI (⚙️ → 15 s…10 min, redémarrage du scheduler) | ✅ done |
+| A5 | Approbation manuelle GitLab dans « Mes revues » et « À revoir » lorsque les threads de l'utilisateur sont résolus | ✅ done |
+| A6 | Masquer durablement une MR revue depuis l'interface | ✅ done |
+| A7 | Lancer les jobs GitLab manuels `build affected` et `auto review` lorsqu'ils sont jouables | ✅ done |
 
 ### Notifications
 
