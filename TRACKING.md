@@ -290,3 +290,43 @@ d'équipe, pas infrastructure, non corrélable de l'extérieur.
 | Une valeur de test (`https://jira.example.test`) laissée dans les préférences | l'utilisateur a cliqué un ticket et est tombé sur une URL inexistante | consigne : noter et restaurer tout réglage muté pour un test |
 | Deux agents assignés au même fichier après une réinitialisation de limite de session | risque d'écrasement silencieux | répartition **par fichier**, arbitrée explicitement |
 | Messages d'arbitrage non délivrés à un agent | un agent est resté bloqué en attente | vérifier la réception dans le transcript avant de supposer qu'un ordre est passé |
+
+---
+
+## Session 2026-08-20 (v0.6.2 — survols et clics inertes)
+
+Parti d'une seule observation de l'utilisateur : cliquer sur le numéro de version ne fait
+rien. Le tooltip était soupçonné de capter le clic — à tort, `ImmediateTooltipHost.hitTest`
+renvoie déjà `nil`. La cause était que la version n'était un `Button` que si Sparkle avait
+déjà trouvé une mise à jour, état qui n'apparaît qu'à la vérification horaire.
+
+L'audit déclenché par la question « d'autres hover dans ce cas ? » en a sorti deux de plus.
+
+| Défaut | Mesure | Correctif |
+|--------|--------|-----------|
+| Version inerte au clic | `Button` seulement si `updateAvailable` | toujours un `Button` → `checkForUpdates()`, pastille orange toujours conditionnée |
+| Info-bulles lentes dans le popover | `MenuBarView` : 39 `.help` pour 20 `.immediateTooltip` | 39/39 — le compteur rend la propriété vérifiable |
+| Accents perdus | 9 chaînes visibles | 0, dont un titre de notification identique dans les deux fichiers |
+
+**Laissé inerte volontairement** : `jiraWarning` (« Jira indisponible »). Cliquer n'aurait
+aucune action utile — l'erreur vient d'`acli`, pas d'un réglage. Il est désormais le jumeau
+visuel du bandeau « URL Jira non configurée », qui lui est cliquable : compromis assumé
+plutôt qu'une fausse promesse.
+
+### Sur la méthode de vérification
+
+Le clic et le survol simulés se sont révélés **peu fiables sur un bureau partagé** : quatre
+acteurs (l'utilisateur et trois agents) déplaçaient le focus. Un clic a atterri sur le
+terminal, une frappe dans Slack. Parade retenue : grouper `frontmost` + délai + clic dans un
+seul appel `osascript`, et surtout hiérarchiser les preuves —
+
+1. **mesure** dans l'arbre d'accessibilité et lecture du code : reproductibles ;
+2. **clic ou survol réel** : nécessaire pour prouver un comportement (hit-test SwiftUI,
+   latence d'apparition d'une bulle), mais fragile — dernier maillon, jamais le seul.
+
+Exemple : lire l'attribut `help` n'aurait rien prouvé sur les info-bulles, il était déjà
+présent avant le correctif. Il fallait déplacer le curseur et capturer 300 ms plus tard.
+
+La persistance du formulaire de réglages n'a pu être prouvée par aucune automatisation —
+régler un champ via l'API d'accessibilité ne déclenche pas la liaison SwiftUI. Vérifiée par
+une saisie humaine.
