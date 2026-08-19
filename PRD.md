@@ -23,13 +23,13 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F10 | Date de merge affichée avec âge inline (`Mergée: Xj`) et tooltip date complète en StatusView | ✅ done |
 | F11 | MRs mergées conservées après redémarrage, jusqu'à `Retirer` | ✅ done |
 | F12 | 10 dernières MRs mergées chargées depuis GitLab au démarrage | ✅ done |
-| F13 | Onglet « Mes revues » : MRs ouvertes où l'utilisateur a commenté, avec auteur, statut Jira, CI, conflits, retard, approbations et threads personnels/autres | ✅ done |
+| F13 | Onglet « Mes revues » : MRs ouvertes où l'utilisateur a commenté ou approuvé, avec auteur, statut Jira, CI, conflits, retard, approbations et threads personnels/autres | ✅ done |
 | F14 | Découverte des revues depuis les événements GitLab, conservation locale des MRs encore ouvertes et rafraîchissement borné par rotation | ✅ done |
 | F15 | Compteurs de threads personnels et externes actionnables : ouvrent directement le premier fil non résolu correspondant dans GitLab | ✅ done |
-| F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant le label `Indigo` ou `indigo`, hors tickets Jira abandonnés | ✅ done |
-| F17 | Priorisation des revues par statut Jira : sections `To Review` (`Code review` inclus) et `Les autres` | ✅ done |
-| F18 | Affichage GitLab immédiat des revues, puis enrichissement et regroupement Jira asynchrones | ✅ done |
-| F19 | Vue « Mes MRs » homogénéisée avec les cartes de revue, et total Indigo détaillé par statut Jira | ✅ done |
+| F16 | Onglet « À revoir » : MRs ouvertes non-Draft d'autres auteurs portant un label GitLab configuré (repli `Indigo, indigo`), hors tickets Jira abandonnés | ✅ done |
+| F17 | Priorisation des revues par statut Jira : sections `To Review` (`Code review` inclus) et `Les autres`; dans « Mes revues », `Approved` clôt la file sauf fil personnel ouvert | ✅ done |
+| F18 | Affichage GitLab immédiat des revues, avec `Chargement Jira` par MR pendant l'enrichissement, publication incrémentale sans état vide puis regroupement Jira asynchrone | ✅ done |
+| F19 | Vue « Mes MRs » homogénéisée avec les cartes de revue, et total de labels surveillés détaillé par statut Jira | ✅ done |
 | F20 | Chargement initial explicite, ticket Jira intégré aux métadonnées et auteur affiché en `Prénom N.`, y compris avec un pseudo GitLab technique | ✅ done |
 | F21 | Rafraîchissement individuel d'une MR, avec mise à jour GitLab puis Jira sans poll global | ✅ done |
 | F22 | Avertissement non bloquant Jira/acli avec détail assaini au survol, et tooltips instantanés pour les actions et les notes de version | ✅ done |

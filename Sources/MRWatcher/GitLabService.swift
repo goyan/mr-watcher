@@ -167,6 +167,10 @@ private struct EventResponse: Codable {
     }
 }
 
+private struct CurrentUserResponse: Codable {
+    let id: Int
+}
+
 private struct CommentEventTarget: Hashable {
     let projectId: Int
     let title: String
@@ -410,6 +414,57 @@ final class GitLabService {
             keys.formUnion(resolvedKeys)
         }
         return keys
+    }
+
+    func fetchOpenMRsApprovedByCurrentUser(maxPages: Int) async throws -> [MRSummary] {
+        let pat = await MainActor.run { config.gitlabPAT }
+        guard let pat else { throw MRWatcherError.notConfigured }
+        let host = await MainActor.run { config.gitlabHost }
+        guard maxPages > 0 else { return [] }
+
+        let userURL = try buildURL(host: host, path: "/api/v4/user", query: [:])
+        var userRequest = URLRequest(url: userURL)
+        userRequest.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+        let (userData, userResponse) = try await session.data(for: userRequest)
+        try validateResponse(userResponse)
+        let user = try JSONDecoder().decode(CurrentUserResponse.self, from: userData)
+
+        var seenKeys: Set<MRKey> = []
+        var mrs: [MRSummary] = []
+        var requestedPages: Set<Int> = []
+        var page = 1
+        while requestedPages.count < maxPages, requestedPages.insert(page).inserted {
+            let url = try buildURL(host: host, path: "/api/v4/merge_requests", query: [
+                "scope": "all",
+                "state": "opened",
+                "approved_by_ids[]": String(user.id),
+                "per_page": "100",
+                "page": String(page)
+            ])
+            var request = URLRequest(url: url)
+            request.setValue(pat, forHTTPHeaderField: "PRIVATE-TOKEN")
+
+            let (data, response) = try await session.data(for: request)
+            try validateResponse(response)
+
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            for mr in try decoder.decode([MRSummary].self, from: data) {
+                let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                if seenKeys.insert(key).inserted {
+                    mrs.append(mr)
+                }
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let nextPageValue = httpResponse.value(forHTTPHeaderField: "X-Next-Page"),
+                  let nextPage = Int(nextPageValue),
+                  nextPage > 0 else {
+                break
+            }
+            page = nextPage
+        }
+        return mrs
     }
 
     private func resolveOpenMRKey(

@@ -300,7 +300,8 @@ struct MenuBarView: View {
                 reviewSections(
                     for: store.reviewedMRs,
                     statuses: store.reviewStatuses,
-                    showsActions: true
+                    showsActions: true,
+                    separatesApproved: true
                 )
             }
         }
@@ -315,7 +316,8 @@ struct MenuBarView: View {
                 reviewSections(
                     for: store.reviewableMRs,
                     statuses: store.reviewableStatuses,
-                    showsActions: true
+                    showsActions: true,
+                    separatesApproved: false
                 )
             }
         }
@@ -325,23 +327,40 @@ struct MenuBarView: View {
     private func reviewSections(
         for mrs: [MRSummary],
         statuses: [MRKey: MRApprovals],
-        showsActions: Bool
+        showsActions: Bool,
+        separatesApproved: Bool
     ) -> some View {
-        let toReview = mrs.filter(isToReview)
-        let others = mrs.filter { !isToReview($0) }
+        let groups = ReviewSectionGroups(
+            mrs: mrs,
+            statuses: statuses,
+            jiraStatuses: store.jiraStatuses,
+            separatesApproved: separatesApproved
+        )
 
-        reviewSection(
-            title: "To Review",
-            mrs: toReview,
-            statuses: statuses,
-            showsActions: showsActions
-        )
-        reviewSection(
-            title: "Les autres",
-            mrs: others,
-            statuses: statuses,
-            showsActions: showsActions
-        )
+        if !groups.toReview.isEmpty {
+            reviewSection(
+                title: "To Review",
+                mrs: groups.toReview,
+                statuses: statuses,
+                showsActions: showsActions
+            )
+        }
+        if !groups.others.isEmpty {
+            reviewSection(
+                title: "Les autres",
+                mrs: groups.others,
+                statuses: statuses,
+                showsActions: showsActions
+            )
+        }
+        if !groups.approved.isEmpty {
+            reviewSection(
+                title: "Approved",
+                mrs: groups.approved,
+                statuses: statuses,
+                showsActions: showsActions
+            )
+        }
     }
 
     private func reviewSection(
@@ -551,7 +570,10 @@ struct MenuBarView: View {
                 openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
             } label: {
                 Label(
-                    store.jiraStatuses[key].map { "\(ticket) · \($0.name)" } ?? ticket,
+                    store.jiraStatuses[key].map { "\(ticket) · \($0.name)" }
+                        ?? (store.jiraLoadingMRKeys.contains(key)
+                            ? "\(ticket) · Chargement Jira"
+                            : ticket),
                     systemImage: "ticket"
                 )
             }
@@ -1128,14 +1150,6 @@ struct MenuBarView: View {
             return nil
         }
         return String(value[range])
-    }
-
-    private func isToReview(_ mr: MRSummary) -> Bool {
-        let key = MRKey(projectId: mr.projectId, iid: mr.iid)
-        guard let status = store.jiraStatuses[key]?.name else { return false }
-        return ["to review", "code review"].contains(
-            status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        )
     }
 
     private func jiraColor(for mr: MRSummary) -> Color {

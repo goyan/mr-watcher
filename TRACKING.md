@@ -157,9 +157,9 @@
 | Navigation de thread | ✅ boutons « Mes fils » et « autres » avec survol, ouvrent l'ancre GitLab du premier fil non résolu correspondant |
 | Cycle de vie des revues | ✅ suppression automatique si tous les commentaires personnels sont supprimés, croix de masquage persistante |
 | Approbation | ✅ statut `Approved` vert après approbation personnelle |
-| File à revoir | ✅ onglet `À revoir` pour les MRs `Indigo`/`indigo` ouvertes, non-Draft, d'autres auteurs, hors tickets Jira abandonnés |
-| Priorisation Jira | ✅ groupes `To Review` puis `Les autres` dans les onglets de revue, avec statut texte visible |
-| Enrichissement Jira différé | ✅ données GitLab publiées immédiatement ; les statuts Jira reclassent les listes à leur arrivée, avec rejet des réponses périmées |
+| File à revoir | ✅ onglet `À revoir` pour les MRs des labels configurés (repli `Indigo, indigo`) ouvertes, non-Draft, d'autres auteurs, hors tickets Jira abandonnés et hors « Mes revues » |
+| Priorisation Jira | ✅ groupes `To Review` puis `Les autres` dans les onglets de revue, avec statut texte visible ; dans « Mes revues », `Approved` est en bas sauf fil personnel ouvert |
+| Enrichissement Jira différé | ✅ données GitLab publiées immédiatement ; chaque MR avec ticket affiche `Chargement Jira` pendant sa requête `acli`, puis reçoit son statut immédiatement sans état vide ; les listes sont reclassées à l'arrivée, avec rejet des réponses périmées |
 | Cohérence des vues | ✅ cartes « Mes MRs » alignées sur les revues ; pied « À revoir » détaille total Indigo, `To Review` et `Les autres` |
 | Finitions des cartes | ✅ chargement initial explicite, ticket Jira près de l’identification, auteur court `Prénom N.` dans toutes les listes, y compris pour les pseudos GitLab techniques |
 | Découverte et charge | ✅ événements GitLab paginés et bornés, résolution des titres par lots de 8, MRs ouvertes persistées, rafraîchissement équitable par rotation |

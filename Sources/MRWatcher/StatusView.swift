@@ -1,6 +1,48 @@
 import AppKit
 import SwiftUI
 
+struct ReviewSectionGroups {
+    let toReview: [MRSummary]
+    let others: [MRSummary]
+    let approved: [MRSummary]
+
+    init(
+        mrs: [MRSummary],
+        statuses: [MRKey: MRApprovals],
+        jiraStatuses: [MRKey: JiraIssueStatus],
+        separatesApproved: Bool
+    ) {
+        let approvedMRs = separatesApproved
+            ? mrs.filter { mr in
+                let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                guard let status = statuses[key] else { return false }
+                return status.isApprovedByMe && status.myUnresolvedThreads == 0
+            }
+            : []
+        approved = approvedMRs
+
+        let approvedKeys = Set(
+            approvedMRs.map { MRKey(projectId: $0.projectId, iid: $0.iid) }
+        )
+        let activeMRs = mrs.filter { mr in
+            !approvedKeys.contains(MRKey(projectId: mr.projectId, iid: mr.iid))
+        }
+        toReview = activeMRs.filter { mr in
+            let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+            guard let status = jiraStatuses[key]?.name else { return false }
+            return ["to review", "code review"].contains(
+                status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            )
+        }
+        let toReviewKeys = Set(
+            toReview.map { MRKey(projectId: $0.projectId, iid: $0.iid) }
+        )
+        others = activeMRs.filter { mr in
+            !toReviewKeys.contains(MRKey(projectId: mr.projectId, iid: mr.iid))
+        }
+    }
+}
+
 struct StatusView: View {
     private enum ContentTab: String, CaseIterable, Identifiable {
         case myMRs = "Mes MRs"
@@ -264,7 +306,8 @@ struct StatusView: View {
                     reviewSections(
                         for: store.reviewedMRs,
                         statuses: store.reviewStatuses,
-                        showsActions: true
+                        showsActions: true,
+                        separatesApproved: true
                     )
                 }
                 .padding(.vertical, 8)
@@ -297,7 +340,8 @@ struct StatusView: View {
                     reviewSections(
                         for: store.reviewableMRs,
                         statuses: store.reviewableStatuses,
-                        showsActions: true
+                        showsActions: true,
+                        separatesApproved: false
                     )
                 }
                 .padding(.vertical, 8)
@@ -344,23 +388,40 @@ struct StatusView: View {
     private func reviewSections(
         for mrs: [MRSummary],
         statuses: [MRKey: MRApprovals],
-        showsActions: Bool
+        showsActions: Bool,
+        separatesApproved: Bool
     ) -> some View {
-        let toReview = mrs.filter(isToReview)
-        let others = mrs.filter { !isToReview($0) }
+        let groups = ReviewSectionGroups(
+            mrs: mrs,
+            statuses: statuses,
+            jiraStatuses: store.jiraStatuses,
+            separatesApproved: separatesApproved
+        )
 
-        reviewSection(
-            title: "To Review",
-            mrs: toReview,
-            statuses: statuses,
-            showsActions: showsActions
-        )
-        reviewSection(
-            title: "Les autres",
-            mrs: others,
-            statuses: statuses,
-            showsActions: showsActions
-        )
+        if !groups.toReview.isEmpty {
+            reviewSection(
+                title: "To Review",
+                mrs: groups.toReview,
+                statuses: statuses,
+                showsActions: showsActions
+            )
+        }
+        if !groups.others.isEmpty {
+            reviewSection(
+                title: "Les autres",
+                mrs: groups.others,
+                statuses: statuses,
+                showsActions: showsActions
+            )
+        }
+        if !groups.approved.isEmpty {
+            reviewSection(
+                title: "Approved",
+                mrs: groups.approved,
+                statuses: statuses,
+                showsActions: showsActions
+            )
+        }
     }
 
     private func reviewSection(
@@ -656,6 +717,9 @@ struct StatusView: View {
             if let ticket = ticket(for: mr),
                let jira = store.jiraStatuses[key] {
                 jiraMetadata(jira, isOpen: true, ticket: ticket)
+            } else if let ticket = ticket(for: mr),
+                      store.jiraLoadingMRKeys.contains(key) {
+                jiraLoadingMetadata(ticket: ticket)
             }
 
             pipelineMetadata(for: mr)
@@ -709,6 +773,9 @@ struct StatusView: View {
         HStack(spacing: 10) {
             if let jira = store.jiraStatuses[key] {
                 jiraMetadata(jira, isOpen: mr.state == "opened", ticket: ticket(for: mr))
+            } else if let ticket = ticket(for: mr),
+                      store.jiraLoadingMRKeys.contains(key) {
+                jiraLoadingMetadata(ticket: ticket)
             }
 
             stateMetadata(for: mr)
@@ -927,6 +994,11 @@ struct StatusView: View {
             Group {
                 if let jira = store.jiraStatuses[MRKey(projectId: mr.projectId, iid: mr.iid)] {
                     jiraMetadata(jira, isOpen: mr.state == "opened", ticket: ticketKey)
+                } else if let ticketKey,
+                          store.jiraLoadingMRKeys.contains(
+                              MRKey(projectId: mr.projectId, iid: mr.iid)
+                          ) {
+                    jiraLoadingMetadata(ticket: ticketKey)
                 }
             }
             .frame(width: 132, alignment: .leading)
@@ -1122,6 +1194,23 @@ struct StatusView: View {
             Label(jira.name, systemImage: jiraSymbol(jira, isOpen: isOpen))
                 .foregroundStyle(jiraColor(jira, isOpen: isOpen))
         }
+    }
+
+    @ViewBuilder
+    private func jiraLoadingMetadata(ticket: String) -> some View {
+        Button {
+            openURL("https://fonciamillenium.atlassian.net/browse/\(ticket)")
+        } label: {
+            HStack(spacing: 4) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Chargement Jira")
+            }
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Ouvrir \(ticket) dans Jira")
+        .immediateTooltip("Ouvrir \(ticket) dans Jira")
     }
 
     private func projectName(for mr: MRSummary) -> String {

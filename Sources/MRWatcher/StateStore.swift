@@ -57,6 +57,7 @@ final class StateStore {
     var lastSuccessfulPollAt: Date? = nil
     var dismissedKeys: Set<MRKey> = []
     var jiraStatuses: [MRKey: JiraIssueStatus] = [:]
+    var jiraLoadingMRKeys: Set<MRKey> = []
     var refreshingMRKeys: Set<MRKey> = []
     var manualPipelineActions: [MRKey: ManualPipelineActions] = [:]
     var launchingManualPipelineJobIds: Set<Int> = []
@@ -102,6 +103,7 @@ final class StateStore {
         dismissedKeys.insert(key)
         mrs.removeAll { MRKey(projectId: $0.projectId, iid: $0.iid) == key }
         jiraStatuses[key] = nil
+        jiraLoadingMRKeys.remove(key)
         discardStaleManualPipelineActions()
         persistMergedState()
     }
@@ -148,6 +150,7 @@ final class StateStore {
         reviewedMRs.removeAll { MRKey(projectId: $0.projectId, iid: $0.iid) == key }
         reviewStatuses[key] = nil
         jiraStatuses[key] = nil
+        jiraLoadingMRKeys.remove(key)
         discardStaleManualPipelineActions()
         persistReviewedMRKeys()
         persistDismissedReviewedMRKeys()
@@ -261,6 +264,21 @@ final class StateStore {
 
     func isDisplayingMR(key: MRKey) -> Bool {
         currentDisplayedMR(for: key) != nil
+    }
+
+    func replaceJiraLoadingMRKeys(_ keys: Set<MRKey>) {
+        jiraLoadingMRKeys = keys
+    }
+
+    func beginJiraLoading(for keys: Set<MRKey>) {
+        jiraLoadingMRKeys.formUnion(keys)
+        for key in keys {
+            jiraStatuses[key] = nil
+        }
+    }
+
+    func finishJiraLoading(for keys: Set<MRKey>) {
+        jiraLoadingMRKeys.subtract(keys)
     }
 
     func update(

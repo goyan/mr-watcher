@@ -8,13 +8,18 @@ MR Watcher propose trois vues, dans la fenêtre principale comme dans le panneau
 barre de menus :
 
 - **Mes MRs** : vos MRs ouvertes et récemment mergées.
-- **Mes revues** : les MRs ouvertes sur lesquelles vous avez commenté.
+- **Mes revues** : les MRs ouvertes sur lesquelles vous avez commenté ou que
+  vous avez approuvées.
 - **À revoir** : les MRs ouvertes, non-Draft, d'autres auteurs, correspondant aux
-  labels GitLab configurés, hors tickets Jira abandonnés.
+  labels GitLab configurés, hors tickets Jira abandonnés et hors **Mes revues**.
 
-Les vues de revue sont regroupées par statut Jira : **To Review** (inclut
-`Code review`) puis **Les autres**. Jira enrichit les données après le premier
-affichage GitLab afin de ne pas bloquer l'interface.
+Dans **Mes revues**, les MRs déjà approuvées sont déplacées dans **Approved**,
+après **To Review** (inclut `Code review`) et **Les autres**, sauf si l'un de
+vos fils reste non résolu : elles demeurent alors dans la file d'action. La
+vue **À revoir** conserve les groupes **To Review** et **Les autres**. Jira
+enrichit les données après le premier affichage GitLab afin de ne pas bloquer
+l'interface. La MR interrogée affiche **Chargement Jira** jusqu'à la
+publication immédiate de son statut, sans état vide intermédiaire.
 
 Chaque ligne affiche :
 
@@ -30,6 +35,7 @@ Chaque ligne affiche :
 | `💬N` | Threads non résolus |
 | âge | Ancienneté de la MR |
 | `[🟡/🟢 statut]` | Statut Jira du ticket associé (via `acli`) |
+| `Chargement Jira` | Statut Jira de la MR en cours de récupération |
 
 ### Actions
 
@@ -101,15 +107,15 @@ partagez jamais.
 Pour préparer une release :
 
 ```bash
-bash scripts/release.sh 0.5.0
+bash scripts/release.sh 0.5.15
 ```
 
-Le script refuse un worktree/index non propre ou un tag local/distant `v0.5.0` déjà existant, puis
-reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.0.zip` pour Sparkle et
-`dist/MRWatcher-v0.5.0.dmg` pour l'installation manuelle, met `VERSION` à jour, signe
+Le script refuse un worktree/index non propre ou un tag local/distant `v0.5.15` déjà existant, puis
+reconstruit SwiftPM depuis un état propre. Il produit `dist/MRWatcher-v0.5.15.zip` pour Sparkle et
+`dist/MRWatcher-v0.5.15.dmg` pour l'installation manuelle, met `VERSION` à jour, signe
 `appcast.xml` et vérifie cette signature. Un préflight sans écriture est disponible avec
-`MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh 0.5.0`. Publiez d'abord les deux archives
-dans la release GitHub `v0.5.0`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
+`MRWATCHER_RELEASE_DRY_RUN=1 bash scripts/release.sh 0.5.15`. Publiez d'abord les deux archives
+dans la release GitHub `v0.5.15`, puis commitez et poussez `VERSION` et `appcast.xml` une fois le ZIP
 disponible. Le ZIP et le feed doivent rester inchangés après signature.
 
 Les notes de release sont maintenues dans `RELEASE_NOTES.md`, embarquées dans

@@ -162,6 +162,7 @@ final class PollingScheduler {
               let issueKey = extractProdTicket(from: mr) else {
             return
         }
+        store.beginJiraLoading(for: [key])
         do {
             let status = try await jira.fetchIssueStatus(issueKey: issueKey)
             guard Self.latestJiraPublicationToken == jiraPublicationToken,
@@ -169,12 +170,14 @@ final class PollingScheduler {
                 return
             }
             store.jiraStatuses[key] = status
+            store.finishJiraLoading(for: [key])
             store.jiraError = nil
         } catch {
             guard Self.latestJiraPublicationToken == jiraPublicationToken,
                   store.isDisplayingMR(key: key) else {
                 return
             }
+            store.finishJiraLoading(for: [key])
             store.jiraError = "Jira \(issueKey) : \(jira.sanitizedErrorDescription(for: error))"
         }
     }
@@ -330,6 +333,9 @@ final class PollingScheduler {
             let eventReviewedKeys = (try? await gitlab.fetchMyCommentedMRKeys(
                 maxPages: eventPageLimit
             )) ?? []
+            let approvedMRsResult = try? await gitlab.fetchOpenMRsApprovedByCurrentUser(
+                maxPages: eventPageLimit
+            )
             let persistedReviewedKeys = await MainActor.run {
                 store.currentReviewedMRKeys()
             }
@@ -374,10 +380,25 @@ final class PollingScheduler {
                 }
             }
 
+            let username = await MainActor.run {
+                ConfigManager.shared.gitlabUsername ?? ""
+            }
+            let approvedMRs = approvedMRsResult ?? []
+            let approvedReviewedKeys = Set(
+                approvedMRs.map { MRKey(projectId: $0.projectId, iid: $0.iid) }
+            )
             let authoredMRKeys = Set(mrs.map { MRKey(projectId: $0.projectId, iid: $0.iid) })
+                .union(
+                    approvedMRs.compactMap { mr in
+                        mr.author?.username.caseInsensitiveCompare(username) == .orderedSame
+                            ? MRKey(projectId: mr.projectId, iid: mr.iid)
+                            : nil
+                    }
+                )
             let reviewedKeys = Set(
                 persistedReviewedKeys
                     .union(eventReviewedKeys)
+                    .union(approvedReviewedKeys)
                     .filter { $0.projectId > 0 && $0.iid > 0 }
             )
             .subtracting(authoredMRKeys)
@@ -388,14 +409,19 @@ final class PollingScheduler {
                     return reviewedKeys.contains(key) ? (key, mr) : nil
                 }
             )
+            for mr in approvedMRs {
+                let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                guard reviewedKeys.contains(key) else { continue }
+                reviewedMRsByKey[key] = mr
+            }
             var reviewStatuses = previousReviewStatuses.filter {
                 reviewedKeys.contains($0.key)
             }
             var retainedReviewedKeys = reviewedKeys
-            let newlyCommentedKeys: Set<MRKey> = eventReviewedKeys.subtracting(
-                persistedReviewedKeys
-            )
-            let newReviewedKeySet: Set<MRKey> = newlyCommentedKeys.intersection(
+            let newlyDiscoveredReviewedKeys = eventReviewedKeys
+                .union(approvedReviewedKeys)
+                .subtracting(persistedReviewedKeys)
+            let newReviewedKeySet: Set<MRKey> = newlyDiscoveredReviewedKeys.intersection(
                 reviewedKeys
             )
             let newReviewedKeys = newReviewedKeySet
@@ -447,7 +473,7 @@ final class PollingScheduler {
                         projectId: key.projectId,
                         mrIid: key.iid
                     ) {
-                        guard status.hasCurrentUserComment else {
+                        guard status.hasCurrentUserComment || status.isApprovedByMe else {
                             retainedReviewedKeys.remove(key)
                             reviewedMRsByKey[key] = nil
                             reviewStatuses[key] = nil
@@ -473,9 +499,6 @@ final class PollingScheduler {
             var reviewableMRs = previousReviewableMRs
             var reviewableStatuses = previousReviewableStatuses
             if let labelMRs = try? await gitlab.fetchOpenReviewableMRs() {
-                let username = await MainActor.run {
-                    ConfigManager.shared.gitlabUsername ?? ""
-                }
                 let candidates = labelMRs.filter { mr in
                     guard !mr.isDraft,
                           !retainedReviewedKeys.contains(
@@ -519,6 +542,18 @@ final class PollingScheduler {
                 // If state == "closed" → ignore silently
             }
 
+            let jiraMRs = Dictionary(
+                (
+                    enrichedMRs
+                        + mergedMRs
+                        + retainedMergedMRs
+                        + reviewedMRs
+                        + reviewableMRs
+                ).map {
+                    (MRKey(projectId: $0.projectId, iid: $0.iid), $0)
+                },
+                uniquingKeysWith: { latest, _ in latest }
+            ).values
             let jiraPublicationToken = UUID()
             await MainActor.run {
                 store.update(
@@ -533,6 +568,7 @@ final class PollingScheduler {
                 // Jira runs after the GitLab result is visible, so grouping initially
                 // falls back to the non-Jira order instead of blocking the first render.
                 store.jiraStatuses = [:]
+                store.replaceJiraLoadingMRKeys([])
                 store.isLoading = false
                 store.lastSuccessfulPollAt = Date()
                 Self.latestJiraPublicationToken = jiraPublicationToken
@@ -548,31 +584,38 @@ final class PollingScheduler {
                 self.scheduleManualPipelineActions(for: actionMRs)
             }
 
-            let jiraMRs = Dictionary(
-                (
-                    enrichedMRs
-                        + mergedMRs
-                        + retainedMergedMRs
-                        + reviewedMRs
-                        + reviewableMRs
-                ).map {
-                    (MRKey(projectId: $0.projectId, iid: $0.iid), $0)
-                },
-                uniquingKeysWith: { latest, _ in latest }
-            ).values
             var newJiraStatuses: [MRKey: JiraIssueStatus] = [:]
             var jiraError: String?
             if jira.isAvailable {
                 for mr in jiraMRs {
                     if Task.isCancelled {
+                        await MainActor.run {
+                            guard Self.latestJiraPublicationToken == jiraPublicationToken else {
+                                return
+                            }
+                            store.replaceJiraLoadingMRKeys([])
+                        }
                         return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
                     }
                     guard let issueKey = extractProdTicket(from: mr) else { continue }
                     let key = MRKey(projectId: mr.projectId, iid: mr.iid)
+                    guard Self.latestJiraPublicationToken == jiraPublicationToken else {
+                        return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
+                    }
+                    store.beginJiraLoading(for: [key])
                     do {
                         let status = try await jira.fetchIssueStatus(issueKey: issueKey)
+                        guard Self.latestJiraPublicationToken == jiraPublicationToken else {
+                            return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
+                        }
                         newJiraStatuses[key] = status
+                        store.jiraStatuses[key] = status
+                        store.finishJiraLoading(for: [key])
                     } catch {
+                        guard Self.latestJiraPublicationToken == jiraPublicationToken else {
+                            return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
+                        }
+                        store.finishJiraLoading(for: [key])
                         if jiraError == nil {
                             jiraError = "Jira \(issueKey) : \(jira.sanitizedErrorDescription(for: error))"
                         }
@@ -610,6 +653,7 @@ final class PollingScheduler {
                 store.jiraStatuses = newJiraStatuses.filter {
                     displayedKeys.contains($0.key)
                 }
+                store.replaceJiraLoadingMRKeys([])
             }
             return PollResult(reviewedRefreshCursor: nextReviewedRefreshCursor)
         } catch {
