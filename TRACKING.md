@@ -171,7 +171,7 @@
 | Labels de revue | ✅ labels GitLab configurables dans Réglages, persistés localement et utilisés par « À revoir » |
 | Notes de release | ✅ résumé embarqué dans le bundle, visible au survol de la version dans les deux vues |
 | Tooltips d'action | ✅ overlays SwiftUI immédiats au-dessus des actions dans les deux vues, avec `.help` conservé en repli |
-| Actions pipeline | ✅ lancement des jobs manuels `build affected` et `auto review`, avec pagination, annulation et garde de pipeline courant |
+| Actions pipeline | ✅ lancement des jobs manuels `build affected` et `auto review`, avec pagination, annulation, garde de pipeline courant et masquage de l'auto review après approbation de Claude |
 | Garde d'approbation | ✅ approbation après tests vérifiés/verts ; auto review indépendante dès que son job est manuel |
 | Tooltips | ✅ panels AppKit immédiats, ancrés aux contrôles, non rognés et non interactifs (le premier clic reste disponible) |
 | Polling | ✅ défaut 10 min ; options jusqu'à 24 h et « Jamais » (0 persistant), sans répétition automatique |

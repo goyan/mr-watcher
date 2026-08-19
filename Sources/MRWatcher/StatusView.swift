@@ -890,7 +890,10 @@ struct StatusView: View {
 
     @ViewBuilder
     private func manualPipelineActions(for mr: MRSummary, key: MRKey) -> some View {
-        ForEach(store.manualPipelineActions[key]?.actions ?? []) { action in
+        let actions = (store.manualPipelineActions[key]?.actions ?? []).filter {
+            $0.kind != .autoReview || !store.isApprovedByClaude(key: key)
+        }
+        ForEach(actions) { action in
             if store.launchingManualPipelineJobIds.contains(action.jobId) {
                 ProgressView()
                     .controlSize(.small)

@@ -120,6 +120,7 @@ struct MRApprovals {
     let firstMyUnresolvedThreadNoteId: Int?
     let firstOtherUnresolvedThreadNoteId: Int?
     let isApprovedByMe: Bool
+    let isApprovedByClaude: Bool
     let hasCurrentUserComment: Bool
 }
 
@@ -146,7 +147,10 @@ private struct ApprovalsResponse: Codable {
         case approvedBy = "approved_by"
     }
     struct ApprovedByEntry: Codable { let user: ApproverUser }
-    struct ApproverUser: Codable { let username: String }
+    struct ApproverUser: Codable {
+        let username: String
+        let name: String?
+    }
 }
 
 private struct EventResponse: Codable {
@@ -514,6 +518,11 @@ final class GitLabService {
             firstOtherUnresolvedThreadNoteId: firstOtherUnresolvedThreadNoteId,
             isApprovedByMe: decoded.approvedBy.contains {
                 $0.user.username.caseInsensitiveCompare(username) == .orderedSame
+            },
+            isApprovedByClaude: decoded.approvedBy.contains {
+                $0.user.name?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare("claude") == .orderedSame
             },
             hasCurrentUserComment: hasCurrentUserComment
         )

@@ -43,7 +43,8 @@ Chaque ligne affiche :
 - **Lancer les tests** — disponible lorsque le job manuel GitLab
   `build affected` peut être joué.
 - **Lancer l'auto review** — disponible indépendamment des tests lorsque son
-  propre job GitLab est manuel.
+  propre job GitLab est manuel, sauf si l'approbation GitLab de Claude est déjà
+  présente.
 - **↩ /rebase (N commits)** — rebase via quick action GitLab (préserve les approbations), déclenche automatiquement le job `build affected`
 - **✕ Retirer** — retire une MR mergée de la liste
 - **✕ Masquer** — retire durablement une MR de **Mes revues**.

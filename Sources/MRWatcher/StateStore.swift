@@ -253,6 +253,12 @@ final class StateStore {
         }
     }
 
+    func isApprovedByClaude(key: MRKey) -> Bool {
+        approvals[key]?.isApprovedByClaude == true
+            || reviewStatuses[key]?.isApprovedByClaude == true
+            || reviewableStatuses[key]?.isApprovedByClaude == true
+    }
+
     func isDisplayingMR(key: MRKey) -> Bool {
         currentDisplayedMR(for: key) != nil
     }

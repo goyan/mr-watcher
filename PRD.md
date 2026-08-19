@@ -36,7 +36,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F23 | Labels GitLab configurables pour alimenter « À revoir », avec repli `Indigo, indigo` | ✅ done |
 | F24 | Notes de version embarquées et visibles au survol de la version installée | ✅ done |
 | F25 | Actions de pipeline manuelles : lancer les tests (`build affected`) et l'auto review CI | ✅ done |
-| F26 | Approbation bloquée jusqu'aux tests `build affected` verts, auto review indépendante | ✅ done |
+| F26 | Approbation bloquée jusqu'aux tests `build affected` verts ; auto review masquée après approbation de Claude | ✅ done |
 
 ### Actions
 
@@ -48,7 +48,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | A4 | Intervalle de poll réglable depuis l'UI (⚙️ → 15 s…24 h ou Jamais, défaut 10 min, redémarrage du scheduler) | ✅ done |
 | A5 | Approbation manuelle GitLab dans « Mes revues » et « À revoir » lorsque les threads de l'utilisateur sont résolus | ✅ done |
 | A6 | Masquer durablement une MR revue depuis l'interface | ✅ done |
-| A7 | Lancer les jobs GitLab manuels `build affected` et `auto review` lorsqu'ils sont jouables | ✅ done |
+| A7 | Lancer les jobs GitLab manuels `build affected` et `auto review` lorsqu'ils sont jouables, sauf après approbation de Claude | ✅ done |
 
 ### Notifications
 
