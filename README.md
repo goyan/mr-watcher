@@ -35,6 +35,14 @@ En revue, la colonne **Votre implication** répond à la seule question qui comp
 ce que *vous* avez à faire sur cette MR — et ses libellés ouvrent directement le
 fil concerné dans GitLab.
 
+Le ticket et son statut Jira forment **un seul tag** — `PROD-12345 · Code review` —
+sur la ligne du titre. Le numéro de MR occupe à lui seul toute sa cellule : deux
+cibles larges et éloignées, plutôt que deux petits liens empilés.
+
+Si aucune **URL Jira** n'est renseignée alors que des tickets sont détectés, un
+avertissement orange apparaît dans l'en-tête et dans le panneau de barre de menus ;
+un clic ouvre les réglages.
+
 Le **panneau de barre de menus** conserve son affichage compact en cartes, avec
 le regroupement par statut Jira (**To Review** / **Les autres** / **Approved**).
 

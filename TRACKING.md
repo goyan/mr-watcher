@@ -238,3 +238,55 @@ zéro diff sur tout le fil.
 `swift build -c release` + `swift test` (60 tests) + `install.sh`, 3 onglets vérifiés en sombre et
 clair à 1000/1140/1600 pt dans l'app installée, dont un clic réel sur un lien de fil (ouverture de
 la bonne ancre `#note_` sur une vraie MR) et un filtre par chip.
+
+---
+
+## Session 2026-08-19 (suite — dé-hardcodage employeur et ergonomie, v0.6.1)
+
+Le dépôt est **public**. Un audit a montré qu'il n'exposait aucun secret — ni PAT, ni `.env`,
+ni artefact suivi, ni clé de signature — mais qu'il publiait l'infrastructure interne d'un
+employeur. Ce lot la retire, et corrige deux défauts d'ergonomie trouvés à l'usage.
+
+### Fuites retirées
+
+| Quoi | Où | Correctif |
+|------|-----|-----------|
+| Hôte GitLab interne | `ConfigManager` (valeur par défaut), `README`, `setup.sh` | défaut vidé, exemple déplacé dans le placeholder |
+| URL Jira interne | codée en dur dans `StatusTableView` (×2) et `MenuBarView` | réglage `jiraBaseURL`, vide par défaut |
+| Identifiant nominatif | exemples du `README` et de `setup.sh` | exemples génériques |
+| 15 tickets réels | fixtures de `StatusPresentationTests` | numéros fictifs |
+| Préfixe `PROD` figé | regex de 3 fichiers | réglage `ticketPrefix`, échappé avant la regex |
+
+Non traité, et assumé : l'email professionnel de l'auteur dans l'historique git. Réécrire
+l'historique d'un dépôt déjà publié et taggué casserait les signatures pour un gain nul.
+Le nom d'équipe `Indigo`, valeur par défaut des labels surveillés, est conservé — nom
+d'équipe, pas infrastructure, non corrélable de l'extérieur.
+
+### Réalisé
+
+| Quoi | Résultat |
+|------|----------|
+| URL Jira et préfixe configurables | ✅ modèle exact de `reviewLabels` ; sans URL, le ticket s'affiche sans lien — l'app n'invente pas une URL qu'elle ne peut pas connaître |
+| Avertissement « URL Jira non configurée » | ✅ fenêtre **et** panneau ; conditionné à *ticket détecté ET URL vide* ; clic → réglages. Sans lui, un utilisateur qui met à jour perdait ses liens en silence |
+| Fusion ticket + statut Jira | ✅ un seul tag `PROD-12345 · Code review` sur la ligne du titre |
+| Cibles de clic | ✅ `!IID` de 45×15 à **56×38 pt** (3,1× la surface), tag Jira de 62×13 à **145–184×19**, et les deux éloignés l'un de l'autre |
+| Formulaire de réglages | ✅ libellés à gauche (les placeholders disparaissaient une fois le champ rempli), textes d'aide, sections alignées à gauche, **un seul bouton** au lieu de trois |
+| Tests | ✅ 65 → 67, dont le préfixe contenant un métacaractère (`A.B` ne doit pas matcher `AxB-123`) |
+
+### Vérifications
+
+- Mesures des cibles via l'API d'accessibilité **avant et après**, pas à l'œil.
+- Clic souris réel — pas `AXPress` — dans le vide à droite du titre : ouvre la MR, **pas** le
+  ticket. C'est le cas où une cible élargie aurait pu empiéter sur la colonne voisine.
+- Les deux états de l'avertissement observés à l'écran, URL vidée puis restaurée.
+- Persistance du formulaire prouvée par une saisie clavier réelle : ni l'automatisation
+  clavier ni l'API d'accessibilité ne déclenchent la liaison SwiftUI, ce point ne peut pas
+  être vérifié par script.
+
+### Incidents de conduite
+
+| Quoi | Effet | Correctif |
+|------|-------|-----------|
+| Une valeur de test (`https://jira.example.test`) laissée dans les préférences | l'utilisateur a cliqué un ticket et est tombé sur une URL inexistante | consigne : noter et restaurer tout réglage muté pour un test |
+| Deux agents assignés au même fichier après une réinitialisation de limite de session | risque d'écrasement silencieux | répartition **par fichier**, arbitrée explicitement |
+| Messages d'arbitrage non délivrés à un agent | un agent est resté bloqué en attente | vérifier la réception dans le transcript avant de supposer qu'un ordre est passé |

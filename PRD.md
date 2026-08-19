@@ -41,6 +41,9 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | F28 | Tags sémantiques compacts et colorés pour Jira, CI, conflits, retards, approbations et fils dans les deux vues de monitoring | ✅ done |
 | F29 | Signal « À revalider » ouvre directement la première note d’un fil personnel nécessitant une revalidation dans les deux vues | ✅ done |
 | F30 | Vue tableau à colonnes pour les 3 onglets (largeurs alignées en-tête/lignes, rail de gravité, pastille État unique cliquable vers le pipeline CI quand l'état est piloté par la CI, colonne Votre implication en revue, tri par gravité figé, chips de filtre à compteurs) | ✅ done |
+| F31 | URL Jira et préfixe de ticket configurables : sans URL, le ticket reste affiché mais n'est plus un lien ; le préfixe est échappé avant d'entrer dans la recherche | ✅ done |
+| F32 | Avertissement « URL Jira non configurée » dans la fenêtre et le panneau, affiché seulement si un ticket est détecté sans URL renseignée, et ouvrant les réglages au clic | ✅ done |
+| F33 | Ticket et statut Jira réunis en un seul tag (`PROD-12345 · Code review`) sur la ligne du titre, et cellule MR ramenée à une cible de clic unique occupant toute sa hauteur | ✅ done |
 
 ### Actions
 
@@ -81,6 +84,7 @@ Objectif : décider en un coup d'œil si une MR a besoin d'un ping Slack pour re
 | I9 | Mise à jour manuelle Sparkle : ZIP et appcast EdDSA signés, vérifiés avant extraction | ✅ done |
 | I10 | Version installée affichée dans le pied de la fenêtre principale | ✅ done |
 | I11 | Sécurité runtime : PAT sans redirection inter-origine et `.env` privé vérifié | ✅ done |
+| I13 | Aucune valeur d'employeur codée en dur : hôte GitLab par défaut vide, URL Jira et préfixe de ticket en réglages locaux | ✅ done |
 | I12 | Panneau de barre de menus : vues À traiter/Toutes, cartes MR, actions contextuelles et états de survol | ✅ done |
 
 ---
