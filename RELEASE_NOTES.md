@@ -1,62 +1,57 @@
-# MR Watcher v0.6.0
+# MR Watcher v0.6.1
 
-La fenêtre principale devient une table à colonnes. Une colonne porte une
-information, à la même place sur chaque ligne : on descend une colonne du
-regard au lieu de lire chaque ligne. Le panneau de barre de menus est
-inchangé.
+## ⚠️ Une action est requise après la mise à jour
+
+L'URL de votre instance Jira était codée en dur dans l'application. Elle devient
+un réglage, **vide par défaut** — tant qu'elle n'est pas renseignée, les tickets
+restent affichés mais ne sont plus cliquables.
+
+Renseignez-la dans **⚙️ → Configurer… → Jira** (par exemple
+`https://votre-org.atlassian.net`). L'application vous le rappelle d'elle-même :
+un avertissement orange apparaît dans l'en-tête, et dans le panneau de barre de
+menus, dès qu'un ticket est détecté sans URL configurée. Un clic dessus ouvre
+les réglages.
+
+Le statut Jira, lui, continue de fonctionner sans réglage : il vient d'`acli`,
+qui n'a pas besoin de l'URL.
 
 ## Ajouts
 
-- **Table à colonnes** dans les trois onglets, en-tête aligné sur les lignes,
-  chiffres en caractères tabulaires. Une donnée absente laisse une cellule
-  vide, jamais un marqueur qui ne dit rien.
-- **Rail de gravité** et **pastille d'état unique** : l'état nomme la prochaine
-  action — `Conflit`, `CI KO`, `Rebase requis`, `CI en cours`, `En attente de
-  revue`, `Prête à merger` — et ouvre le pipeline quand il s'agit d'un état CI.
-  Le détail complet reste au survol. La couleur n'est jamais le seul porteur de
-  sens.
-- **Tri par urgence**, figé, à la place du tri par date. Sur vos MRs : bloquée,
-  en retard, fils ouverts, en attente d'approbation, prête. En revue : à
-  revalider, à reviewer, j'attends l'auteur, approuvée — la plus vieille dette
-  de review d'abord.
-- **Chips de filtre à compteurs** dans les onglets de revue (`Tout`,
-  `À revalider`, `Mes fils`, `Sans revue`, `To Review`, `Approuvées`), sur une
-  liste plate. Une chip à zéro reste affichée et grisée : les positions ne
-  bougent jamais. Elles remplacent le groupement par statut Jira, qui plaçait
-  les MRs déjà approuvées au-dessus de celles qui demandaient une action.
-- **Colonne « Votre implication »** en revue : ce que *vous* avez à faire sur
-  cette MR, séparé de l'état objectif de la MR. Ses libellés ouvrent
-  directement le fil concerné dans GitLab.
-- **Densité** : environ 18 lignes visibles là où il en tenait 8.
+- **URL Jira configurable.** L'application n'invente jamais une URL qu'elle ne
+  peut pas connaître : sans réglage, le ticket s'affiche sans lien.
+- **Préfixe de ticket configurable** (`PROD` par défaut). Il est cherché dans le
+  nom de branche puis dans le titre de la MR. Un préfixe contenant un caractère
+  spécial est échappé avant d'entrer dans la recherche, au lieu de casser
+  silencieusement la détection.
+- **Avertissement « URL Jira non configurée »** dans la fenêtre et dans le
+  panneau, affiché uniquement quand un ticket est détecté et qu'aucune URL n'est
+  renseignée. Actionnable : il ouvre les réglages.
+- **Le ticket et son statut Jira sont réunis** en un seul tag,
+  `PROD-12345 · Code review`, sur la ligne du titre — comme le fait déjà le
+  panneau de barre de menus.
 
 ## Corrections
 
-- Les numéros de MR s'affichaient `!57 020` : l'interpolation d'un entier dans
-  un libellé appliquait le séparateur de milliers français. Corrigé partout,
-  y compris dans les libellés d'accessibilité.
-- La colonne Actions était coupée à la largeur minimale de la fenêtre, rendant
-  **Masquer** inatteignable. La largeur minimale est désormais calculée à
-  partir des colonnes réelles et ne peut plus être inférieure au contenu.
-- Le bouton `/rebase` restait masqué grâce à une comparaison de texte, donc
-  serait réapparu sur les MRs en conflit si le libellé changeait. La règle
-  s'appuie maintenant sur l'état de conflit lui-même.
-- Le titre d'une MR n'est plus étiré indéfiniment dans une fenêtre large.
-- Le ticket n'est plus écrit deux fois quand le titre le répète déjà.
-- Les compteurs de retard à quatre chiffres sont bornés à `999+` : ils
-  écrasaient la colonne alors qu'ils en disent moins qu'un petit nombre.
-
-## À savoir
-
-- La largeur minimale de la fenêtre passe de 760 à 986 points : une fenêtre
-  plus étroite s'élargira une fois au premier lancement.
-- Le panneau de barre de menus conserve son affichage compact en cartes et son
-  groupement par statut Jira.
+- **Les cibles de clic étaient trop petites.** Le numéro de MR et le ticket
+  étaient deux liens empilés dans une colonne de 65 points, hauts de 15 et
+  13 points : il fallait viser, et on ouvrait GitLab en croyant ouvrir Jira.
+  Le numéro occupe maintenant toute la cellule (56 × 38 points, trois fois la
+  surface) et le tag Jira, déplacé sur la ligne du titre, en fait 145 à 184 de
+  large. Les libellés de fils de la colonne « Votre implication » sont
+  cliquables sur toute la largeur de leur colonne.
+- **Le formulaire de réglages était illisible.** Les champs n'avaient que des
+  textes d'exemple, qui disparaissent une fois le champ rempli : on voyait
+  `PROD` seul dans une case sans savoir ce qu'elle désignait. Chaque champ porte
+  désormais un libellé, les réglages sensibles ont un texte d'aide, les sections
+  sont alignées à gauche, et **un seul bouton enregistre tout** au lieu de trois.
+- L'hôte GitLab par défaut est vide : une application non configurée reste non
+  configurée, au lieu de désigner l'instance d'une organisation particulière.
 
 ## Validation
 
-- `swift build -c release` sans avertissement, `swift test` (60 tests), et
-  installation locale.
-- Les quatre commits compilent chacun isolément : l'historique reste bisectable.
-- Vérifié dans l'application installée, en clair et en sombre, à 986, 1140 et
-  1600 points de large : les trois onglets, les actions de ligne, les ancres de
-  fils GitLab et le filtrage par chips.
+- `swift build -c release` sans avertissement, `swift test` (67 tests).
+- Vérifié dans l'application installée : les deux états de l'avertissement
+  (URL vide puis renseignée), le formulaire avec ses champs remplis, et les
+  cibles de clic mesurées via l'API d'accessibilité avant et après.
+- Le clic dans le vide à droite du titre ouvre bien la merge request et non le
+  ticket : la cible élargie n'empiète pas sur la colonne voisine.
